@@ -2,6 +2,7 @@ use adw::prelude::*;
 use silo_core::browser::BrowserEntry;
 use silo_core::config::{self, Config};
 
+
 pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) -> adw::PreferencesWindow {
     let window = adw::PreferencesWindow::builder()
         .application(app)
@@ -146,8 +147,63 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
 
     rules_page.add(&rules_group);
 
+    // -- about --
+
+    let about_page = adw::PreferencesPage::builder()
+        .title("About")
+        .icon_name("help-about-symbolic")
+        .build();
+
+    let info_group = adw::PreferencesGroup::builder()
+        .title("Silo 0.1.0")
+        .description("Browser picker with profile support. MIT licence.")
+        .build();
+
+    let github_row = adw::ActionRow::builder()
+        .title("GitHub")
+        .subtitle("github.com/no-faff/silo")
+        .activatable(true)
+        .build();
+    github_row.add_prefix(&gtk::Image::from_icon_name("starred-symbolic"));
+    github_row.add_suffix(&gtk::Image::from_icon_name("external-link-symbolic"));
+    github_row.connect_activated(|_| {
+        let _ = std::process::Command::new("xdg-open")
+            .arg("https://github.com/no-faff/silo")
+            .spawn();
+    });
+
+    let issue_row = adw::ActionRow::builder()
+        .title("Report an issue")
+        .activatable(true)
+        .build();
+    issue_row.add_prefix(&gtk::Image::from_icon_name("mail-send-symbolic"));
+    issue_row.add_suffix(&gtk::Image::from_icon_name("external-link-symbolic"));
+    issue_row.connect_activated(|_| {
+        let _ = std::process::Command::new("xdg-open")
+            .arg("https://github.com/no-faff/silo/issues")
+            .spawn();
+    });
+
+    let donate_row = adw::ActionRow::builder()
+        .title("Buy me a cuppa")
+        .activatable(true)
+        .build();
+    donate_row.add_prefix(&gtk::Image::from_icon_name("emblem-favorite-symbolic"));
+    donate_row.add_suffix(&gtk::Image::from_icon_name("external-link-symbolic"));
+    donate_row.connect_activated(|_| {
+        let _ = std::process::Command::new("xdg-open")
+            .arg("https://nofaff.netlify.app")
+            .spawn();
+    });
+
+    info_group.add(&github_row);
+    info_group.add(&issue_row);
+    info_group.add(&donate_row);
+    about_page.add(&info_group);
+
     window.add(&behaviour_page);
     window.add(&rules_page);
+    window.add(&about_page);
 
     let browsers_clone = browsers.to_vec();
     window.connect_close_request(move |_| {
