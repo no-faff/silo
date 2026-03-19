@@ -13,9 +13,7 @@ pub fn show(
     let url = url.to_string();
     let domain_str = domain.unwrap_or("").to_string();
 
-    let header = adw::HeaderBar::builder()
-        .show_title(false)
-        .build();
+    let header = adw::HeaderBar::new();
 
     let remember_title = if domain_str.is_empty() {
         "Always use for this link".to_string()
@@ -79,8 +77,41 @@ pub fn show(
     let content_box = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .build();
+    let heart_btn = gtk::Button::builder()
+        .icon_name("emblem-favorite-symbolic")
+        .tooltip_text("Buy me a cuppa")
+        .css_classes(["flat"])
+        .build();
+    heart_btn.connect_clicked(|_| {
+        let _ = std::process::Command::new("xdg-open")
+            .arg("https://nofaff.netlify.app")
+            .spawn();
+    });
+
+    let star_btn = gtk::Button::builder()
+        .icon_name("starred-symbolic")
+        .tooltip_text("Leave a star on GitHub")
+        .css_classes(["flat"])
+        .build();
+    star_btn.connect_clicked(|_| {
+        let _ = std::process::Command::new("xdg-open")
+            .arg("https://github.com/no-faff/silo")
+            .spawn();
+    });
+
+    let bottom_bar = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .halign(gtk::Align::Center)
+        .spacing(4)
+        .margin_top(8)
+        .margin_bottom(8)
+        .build();
+    bottom_bar.append(&star_btn);
+    bottom_bar.append(&heart_btn);
+
     content_box.append(&remember_list);
     content_box.append(&scrolled);
+    content_box.append(&bottom_bar);
 
     let toolbar = adw::ToolbarView::new();
     toolbar.add_top_bar(&header);
@@ -109,7 +140,7 @@ pub fn show(
     list_box.connect_row_activated(move |_, row| {
         let index = row.index() as usize;
         if let Some(entry) = browsers_clone.get(index) {
-            save_choice(&remember_ref, &domain_clone, entry);
+            save_choice(&remember_ref, &domain_clone, entry, &window_ref);
 
             if let Err(e) = silo_core::launcher::launch(entry, &url_clone) {
                 let dialog = adw::AlertDialog::builder()
@@ -155,7 +186,7 @@ pub fn show(
 
         if let Some(i) = index
             && let Some(entry) = browsers_for_keys.get(i) {
-                save_choice(&remember_for_keys, &domain_for_keys, entry);
+                save_choice(&remember_for_keys, &domain_for_keys, entry, &window_for_keys);
 
                 if let Err(e) = silo_core::launcher::launch(entry, &url_for_keys) {
                     let dialog = adw::AlertDialog::builder()
@@ -176,27 +207,27 @@ pub fn show(
 
     window.add_controller(key_controller);
 
-    window.connect_close_request(|win| {
-        let mut config = config::load();
-        let (w, h) = win.default_size();
-        config.picker_size = Some(silo_core::config::WindowSize {
-            width: w,
-            height: h,
-        });
-        if let Err(e) = config::save(&config) {
-            eprintln!("silo: failed to save config: {e}");
-        }
-        gtk::glib::Propagation::Proceed
-    });
-
+    // modal so it takes focus even when settings is open behind
+    window.set_modal(true);
     window.present();
 
     window
 }
 
-fn save_choice(remember_row: &adw::SwitchRow, domain: &str, entry: &BrowserEntry) {
+fn save_choice(
+    remember_row: &adw::SwitchRow,
+    domain: &str,
+    entry: &BrowserEntry,
+    window: &adw::ApplicationWindow,
+) {
     let mut config = config::load();
     config.remember_choice = remember_row.is_active();
+
+    let (w, h) = window.default_size();
+    config.picker_size = Some(silo_core::config::WindowSize {
+        width: w,
+        height: h,
+    });
 
     if remember_row.is_active() && !domain.is_empty() {
         let new_rule = Rule {
