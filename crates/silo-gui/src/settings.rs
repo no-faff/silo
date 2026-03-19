@@ -2,7 +2,7 @@ use adw::prelude::*;
 use silo_core::browser::BrowserEntry;
 use silo_core::config::{self, Config};
 
-pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) {
+pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) -> adw::PreferencesWindow {
     let window = adw::PreferencesWindow::builder()
         .application(app)
         .title("Silo")
@@ -70,19 +70,16 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
 
         let window_for_reg = window.clone();
         register_btn.connect_clicked(move |_| {
-            let result = std::process::Command::new("xdg-settings")
-                .args(["set", "default-web-browser", "com.nofaff.Silo.desktop"])
-                .status();
-
-            match result {
-                Ok(status) if status.success() => {
+            match silo_core::register::set_default_browser() {
+                Ok(previous) => {
                     let mut config = config::load();
                     config.setup_declined = false;
+                    config.previous_default_browser = previous;
                     let _ = config::save(&config);
                     window_for_reg.close();
                 }
-                _ => {
-                    eprintln!("silo: failed to register as default browser");
+                Err(e) => {
+                    eprintln!("silo: {e}");
                 }
             }
         });
@@ -178,4 +175,6 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
     });
 
     window.present();
+
+    window
 }
