@@ -155,7 +155,7 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
         .build();
 
     let info_group = adw::PreferencesGroup::builder()
-        .title("Silo 0.1.0")
+        .title("Silo 1.0.0")
         .description("Browser picker with profile support. MIT licence.")
         .build();
 
