@@ -33,7 +33,6 @@ themselves:
 - **Firefox family:** Firefox, Zen, Floorp, LibreWolf, Waterfox, Mullvad Browser
 
 "Vivaldi - Work" and "Vivaldi - Personal" appear as separate entries.
-Pick the right one and the link opens in the right profile.
 
 Unknown browsers still appear in the picker, just without profile
 expansion.
