@@ -34,8 +34,8 @@ themselves:
 
 "Vivaldi - Work" and "Vivaldi - Personal" appear as separate entries.
 
-Unknown browsers still appear in the picker, just without profile
-expansion.
+Other browsers still appear in the picker, just without individual
+profiles listed.
 
 ## Installing
 
