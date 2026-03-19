@@ -1,0 +1,14 @@
+{
+    "profile": {
+        "info_cache": {
+            "Default": {
+                "name": "Personal",
+                "shortcut_name": "Personal"
+            },
+            "Profile 1": {
+                "name": "Work",
+                "shortcut_name": "Work"
+            }
+        }
+    }
+}

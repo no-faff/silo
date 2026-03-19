@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Brave Web Browser
+Exec=/usr/bin/flatpak run --branch=stable com.brave.Browser %u
+Icon=com.brave.Browser
+Type=Application
+MimeType=x-scheme-handler/http;x-scheme-handler/https;

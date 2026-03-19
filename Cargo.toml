@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "crates/silo-core",
+    "crates/silo-gui",
+    "crates/silo",
+]
+resolver = "2"

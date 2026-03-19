@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Text Editor
+Exec=/usr/bin/gedit %f
+Icon=text-editor
+Type=Application
+MimeType=text/plain;
+Categories=Utility;TextEditor;

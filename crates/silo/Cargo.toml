@@ -1,0 +1,10 @@
+[package]
+name = "silo"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+silo-gui = { path = "../silo-gui" }
+silo-core = { path = "../silo-core" }
+gtk = { version = "0.11", package = "gtk4" }
+glib = { version = "0.20", package = "glib" }

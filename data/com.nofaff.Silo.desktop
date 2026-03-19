@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Silo
+Comment=Browser picker with profile support
+Exec=silo %u
+Icon=com.nofaff.Silo
+Type=Application
+Categories=Network;Utility;
+MimeType=x-scheme-handler/http;x-scheme-handler/https;
+StartupNotify=false
