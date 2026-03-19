@@ -185,13 +185,11 @@ pub fn discover() -> Vec<BrowserEntry> {
 
         for entry in read_dir.flatten() {
             let path = entry.path();
-            if path.extension().is_some_and(|e| e == "desktop") {
-                if let Some(de) = desktop::parse(&path) {
-                    if de.is_browser() && seen_ids.insert(de.id.clone()) {
+            if path.extension().is_some_and(|e| e == "desktop")
+                && let Some(de) = desktop::parse(&path)
+                    && de.is_browser() && seen_ids.insert(de.id.clone()) {
                         expand_entry(&de, &mut entries);
                     }
-                }
-            }
         }
     }
 
@@ -215,7 +213,7 @@ fn expand_entry(de: &desktop::DesktopEntry, entries: &mut Vec<BrowserEntry>) {
                             desktop_file: de.id.clone(),
                             display_name: format!("{} - {}", de.name, name),
                             icon: de.icon.clone(),
-                            profile_args: Some(format!("--profile-directory={dir}")),
+                            profile_args: Some(format!("'--profile-directory={dir}'")),
                             exec: de.exec.clone(),
                         });
                     }

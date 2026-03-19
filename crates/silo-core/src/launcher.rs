@@ -19,13 +19,12 @@ pub fn launch(entry: &BrowserEntry, url: &str) -> Result<(), String> {
         };
     }
 
-    if let Some(ref args) = entry.profile_args {
-        if let Some(parsed) = shlex::split(args) {
+    if let Some(ref args) = entry.profile_args
+        && let Some(parsed) = shlex::split(args) {
             for arg in parsed {
                 cmd.arg(arg);
             }
         }
-    }
 
     if !entry.exec.contains("%u") && !entry.exec.contains("%U") {
         cmd.arg(url);
