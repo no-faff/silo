@@ -73,3 +73,50 @@ pub fn set_default_browser() -> Result<Option<String>, String> {
 
     Ok(previous)
 }
+
+/// Removes the .desktop file, restores the previous default browser,
+/// deletes config, and removes the binary.
+pub fn uninstall() -> Result<(), String> {
+    let config = crate::config::load();
+
+    // restore previous default browser
+    let current = Command::new("xdg-settings")
+        .args(["get", "default-web-browser"])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+
+    if current == DESKTOP_FILENAME {
+        if let Some(ref previous) = config.previous_default_browser {
+            let _ = Command::new("xdg-settings")
+                .args(["set", "default-web-browser", previous])
+                .status();
+        }
+    }
+
+    // remove .desktop file
+    let desktop = desktop_install_path();
+    let _ = std::fs::remove_file(&desktop);
+    if let Some(parent) = desktop.parent() {
+        let _ = Command::new("update-desktop-database")
+            .arg(parent)
+            .status();
+    }
+
+    // remove config
+    let config_dir = crate::config::config_path()
+        .parent()
+        .map(|p| p.to_path_buf());
+    if let Some(dir) = config_dir {
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // remove the binary itself
+    if let Ok(exe) = std::env::current_exe() {
+        let _ = std::fs::remove_file(&exe);
+    }
+
+    Ok(())
+}
