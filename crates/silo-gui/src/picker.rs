@@ -153,18 +153,23 @@ pub fn show(
             _ => None,
         };
 
-        if let Some(i) = index {
-            if let Some(entry) = browsers_for_keys.get(i) {
+        if let Some(i) = index
+            && let Some(entry) = browsers_for_keys.get(i) {
                 save_choice(&remember_for_keys, &domain_for_keys, entry);
 
                 if let Err(e) = silo_core::launcher::launch(entry, &url_for_keys) {
-                    eprintln!("silo: {e}");
+                    let dialog = adw::AlertDialog::builder()
+                        .heading("Failed to open browser")
+                        .body(&e)
+                        .build();
+                    dialog.add_responses(&[("close", "Dismiss")]);
+                    dialog.present(Some(&window_for_keys));
+                    return gtk::glib::Propagation::Stop;
                 }
 
                 window_for_keys.close();
                 return gtk::glib::Propagation::Stop;
             }
-        }
 
         gtk::glib::Propagation::Proceed
     });

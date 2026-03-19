@@ -39,14 +39,13 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
     );
     fallback_row.set_model(Some(&model));
 
-    if let Some(ref fb) = config.fallback_browser {
-        if let Some(pos) = browsers.iter().position(|b| {
+    if let Some(ref fb) = config.fallback_browser
+        && let Some(pos) = browsers.iter().position(|b| {
             b.desktop_file == fb.desktop_file
                 && b.profile_args.as_deref() == fb.args.as_deref()
         }) {
             fallback_row.set_selected(pos as u32 + 1);
         }
-    }
 
     let behaviour_group = adw::PreferencesGroup::new();
     behaviour_group.add(&always_ask_row);

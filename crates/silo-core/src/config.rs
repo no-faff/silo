@@ -88,7 +88,7 @@ pub fn save_to(config: &Config, path: &std::path::Path) -> Result<(), std::io::E
     }
 
     let json = serde_json::to_string_pretty(config)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        .map_err(std::io::Error::other)?;
 
     let tmp_path = path.with_extension("json.tmp");
     std::fs::write(&tmp_path, &json)?;

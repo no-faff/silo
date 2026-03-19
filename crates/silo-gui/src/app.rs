@@ -83,9 +83,9 @@ fn handle_url(app: &adw::Application, url: &str) {
         return;
     }
 
-    if let Some(ref domain) = domain {
-        if let Some(rule) = silo_core::rule::find_matching_rule(&config.rules, domain) {
-            if let Some(entry) = browsers.iter().find(|b| {
+    if let Some(ref domain) = domain
+        && let Some(rule) = silo_core::rule::find_matching_rule(&config.rules, domain)
+            && let Some(entry) = browsers.iter().find(|b| {
                 b.desktop_file == rule.browser.desktop_file
                     && b.profile_args.as_deref() == rule.browser.args.as_deref()
             }) {
@@ -94,12 +94,10 @@ fn handle_url(app: &adw::Application, url: &str) {
                 }
                 return;
             }
-        }
-    }
 
-    if !config.always_ask {
-        if let Some(ref fallback) = config.fallback_browser {
-            if let Some(entry) = browsers.iter().find(|b| {
+    if !config.always_ask
+        && let Some(ref fallback) = config.fallback_browser
+            && let Some(entry) = browsers.iter().find(|b| {
                 b.desktop_file == fallback.desktop_file
                     && b.profile_args.as_deref() == fallback.args.as_deref()
             }) {
@@ -108,8 +106,6 @@ fn handle_url(app: &adw::Application, url: &str) {
                 }
                 return;
             }
-        }
-    }
 
     crate::picker::show(app, url, domain.as_deref(), &browsers, &config);
 }

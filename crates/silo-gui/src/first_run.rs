@@ -20,11 +20,11 @@ pub fn show(app: &adw::Application, url: Option<String>) {
         }
         let domain = silo_core::url::extract_domain(url);
         let picker = crate::picker::show(app, url, domain.as_deref(), &browsers, &default_config);
-        wire_response(dialog.clone(), url.clone());
+        wire_response(dialog.clone());
         dialog.present(Some(&picker));
     } else {
         let settings = crate::settings::show(app, &default_config, &browsers);
-        wire_response(dialog.clone(), String::new());
+        wire_response(dialog.clone());
         dialog.present(Some(&settings));
     };
 }
@@ -42,7 +42,7 @@ fn build_dialog() -> adw::AlertDialog {
     dialog
 }
 
-fn wire_response(dialog: adw::AlertDialog, _url: String) {
+fn wire_response(dialog: adw::AlertDialog) {
     dialog.connect_response(None, move |_dialog, response| {
         if response == "accept" {
             let (tx, rx) = std::sync::mpsc::channel();
@@ -67,8 +67,10 @@ fn wire_response(dialog: adw::AlertDialog, _url: String) {
                 Err(_) => gtk::glib::ControlFlow::Break,
             });
         } else {
-            let mut new_config = config::Config::default();
-            new_config.setup_declined = true;
+            let new_config = config::Config {
+                setup_declined: true,
+                ..config::Config::default()
+            };
             let _ = config::save(&new_config);
         }
     });
