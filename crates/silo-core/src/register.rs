@@ -2,12 +2,19 @@ use std::path::PathBuf;
 use std::process::Command;
 
 const DESKTOP_FILENAME: &str = "com.nofaff.Silo.desktop";
+const ICON_BYTES: &[u8] = include_bytes!("../../../data/icons/hicolor/128x128/apps/com.nofaff.Silo.png");
 
 fn desktop_install_path() -> PathBuf {
     dirs::data_dir()
         .expect("could not determine XDG_DATA_HOME")
         .join("applications")
         .join(DESKTOP_FILENAME)
+}
+
+fn icon_install_path() -> PathBuf {
+    dirs::data_dir()
+        .expect("could not determine XDG_DATA_HOME")
+        .join("icons/hicolor/128x128/apps/com.nofaff.Silo.png")
 }
 
 /// Writes the .desktop file to ~/.local/share/applications/ pointing at
@@ -44,6 +51,16 @@ pub fn install_desktop_file() -> Result<(), String> {
     // best-effort, not fatal if missing
     let _ = Command::new("update-desktop-database")
         .arg(dest.parent().unwrap())
+        .status();
+
+    // install icon
+    let icon_dest = icon_install_path();
+    if let Some(parent) = icon_dest.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&icon_dest, ICON_BYTES);
+    let _ = Command::new("gtk-update-icon-cache")
+        .arg(dirs::data_dir().unwrap().join("icons/hicolor"))
         .status();
 
     Ok(())
@@ -104,6 +121,9 @@ pub fn uninstall() -> Result<(), String> {
             .arg(parent)
             .status();
     }
+
+    // remove icon
+    let _ = std::fs::remove_file(icon_install_path());
 
     // remove config
     let config_dir = crate::config::config_path()
