@@ -35,8 +35,11 @@ pub fn install_desktop_file() -> Result<(), String> {
             .map_err(|e| format!("could not create {}: {e}", parent.display()))?;
     }
 
-    std::fs::write(&dest, contents)
-        .map_err(|e| format!("could not write {}: {e}", dest.display()))?;
+    let tmp = dest.with_extension("desktop.tmp");
+    std::fs::write(&tmp, contents)
+        .map_err(|e| format!("could not write {}: {e}", tmp.display()))?;
+    std::fs::rename(&tmp, &dest)
+        .map_err(|e| format!("could not rename to {}: {e}", dest.display()))?;
 
     // best-effort, not fatal if missing
     let _ = Command::new("update-desktop-database")
