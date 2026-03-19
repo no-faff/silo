@@ -16,10 +16,10 @@ broader profile detection and a native GNOME look.
 
 ## What it does
 
-Silo registers as your default browser. When any app opens a link, Silo
-shows a list of every browser (and every browser profile) on your system.
-Pick one, it opens there. Close the picker without choosing and nothing
-happens.
+Silo registers as your default browser. Don't worry, it doesn't replace
+anything. It just sits in the middle so that when you click a link
+outside a browser (in an email, a chat app, a document, wherever), Silo
+pops up and lets you choose which browser or profile to open it in.
 
 Toggle "Always use for example.com" and that domain goes straight to
 your chosen browser next time with no popup.
@@ -59,7 +59,8 @@ cd silo-1.0.0
 
 This copies the binary to `~/.local/bin/` and installs the `.desktop`
 file. Launch Silo from your app launcher or run `silo` in a terminal.
-It will ask to set itself as your default browser.
+On first launch it asks to register as your default browser, which is
+how it intercepts links so you get the choice.
 
 ## Uninstalling
 
