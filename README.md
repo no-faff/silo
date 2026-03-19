@@ -34,9 +34,6 @@ themselves:
 
 "Vivaldi - Work" and "Vivaldi - Personal" appear as separate entries.
 
-Other browsers still appear in the picker, just without individual
-profiles listed.
-
 ## Installing
 
 Silo needs GTK4 and libadwaita. On Fedora:
