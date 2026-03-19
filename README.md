@@ -26,8 +26,8 @@ your chosen browser next time with no popup.
 
 ## Profile detection
 
-Most browser pickers show you a list of browsers. Silo also detects
-profiles within each browser:
+Silo detects profiles within each browser, not just the browsers
+themselves:
 
 - **Chromium family:** Chrome, Edge, Brave, Vivaldi, Opera, Chromium
 - **Firefox family:** Firefox, Zen, Floorp, LibreWolf, Waterfox, Mullvad Browser
