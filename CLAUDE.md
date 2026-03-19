@@ -1,7 +1,6 @@
 # Silo
 
 Part of the **No Faff** suite of small utilities (github.com/no-faff).
-Shared brand conventions: `/mnt/windows/claude-kb/no-faff/suite.md`
 
 ## What it does
 
@@ -44,14 +43,12 @@ cargo test --workspace
 
 ## Code quality standards
 
-Same as Simple Browser Picker. Read the quality standards in
-`/mnt/windows/claude-kb/no-faff/suite.md`.
-
 - No speculative code
 - No silent failures
 - Atomic file writes
 - Validate at boundaries
 - British English, no Oxford comma, sentence case
+- MIT licence
 
 ## Key docs
 
