@@ -4,3 +4,4 @@ pub mod rule;
 pub mod desktop;
 pub mod browser;
 pub mod launcher;
+pub mod register;
