@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Brave Web Browser
+Exec=/usr/bin/brave-browser-stable %u
+Icon=brave-browser
+Type=Application
+MimeType=x-scheme-handler/http;x-scheme-handler/https;
+NoDisplay=true

@@ -5,11 +5,12 @@ pub struct DesktopEntry {
     pub exec: String,
     pub icon: String,
     pub mime_types: Vec<String>,
+    pub no_display: bool,
 }
 
 impl DesktopEntry {
     pub fn is_browser(&self) -> bool {
-        self.mime_types.iter().any(|m| m == "x-scheme-handler/http")
+        !self.no_display && self.mime_types.iter().any(|m| m == "x-scheme-handler/http")
     }
 
     /// First token of the Exec line (strips %u, %f etc).
@@ -25,6 +26,7 @@ pub fn parse(path: &std::path::Path) -> Option<DesktopEntry> {
     let mut exec = None;
     let mut icon = None;
     let mut mime_types = Vec::new();
+    let mut no_display = false;
     let mut in_desktop_entry = false;
 
     for line in content.lines() {
@@ -58,6 +60,8 @@ pub fn parse(path: &std::path::Path) -> Option<DesktopEntry> {
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
                 .collect();
+        } else if line == "NoDisplay=true" {
+            no_display = true;
         }
     }
 
@@ -69,6 +73,7 @@ pub fn parse(path: &std::path::Path) -> Option<DesktopEntry> {
         exec: exec?,
         icon: icon.unwrap_or_default(),
         mime_types,
+        no_display,
     })
 }
 
@@ -113,6 +118,13 @@ mod tests {
     fn executable_strips_field_codes() {
         let entry = parse(&fixture("firefox.desktop")).unwrap();
         assert_eq!(entry.executable(), "/usr/bin/firefox");
+    }
+
+    #[test]
+    fn nodisplay_browser_is_not_browser() {
+        let entry = parse(&fixture("nodisplay-browser.desktop")).unwrap();
+        assert!(entry.no_display);
+        assert!(!entry.is_browser());
     }
 
     #[test]
