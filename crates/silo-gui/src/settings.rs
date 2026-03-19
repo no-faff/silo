@@ -201,6 +201,45 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
     info_group.add(&donate_row);
     about_page.add(&info_group);
 
+    let uninstall_group = adw::PreferencesGroup::new();
+    let uninstall_row = adw::ActionRow::builder()
+        .title("Uninstall Silo")
+        .subtitle("Remove Silo and restore your previous default browser")
+        .activatable(true)
+        .build();
+    uninstall_row.add_prefix(&gtk::Image::from_icon_name("user-trash-symbolic"));
+
+    let window_for_uninstall = window.clone();
+    uninstall_row.connect_activated(move |_| {
+        let dialog = adw::AlertDialog::builder()
+            .heading("Uninstall Silo?")
+            .body("This will remove Silo, its config and rules, and restore your previous default browser.")
+            .build();
+        dialog.add_responses(&[("cancel", "Cancel"), ("uninstall", "Uninstall")]);
+        dialog.set_response_appearance("uninstall", adw::ResponseAppearance::Destructive);
+        dialog.set_default_response(Some("cancel"));
+
+        let win = window_for_uninstall.clone();
+        dialog.connect_response(None, move |_, response| {
+            if response == "uninstall" {
+                match silo_core::register::uninstall() {
+                    Ok(()) => {
+                        eprintln!("silo: uninstalled");
+                        win.close();
+                        std::process::exit(0);
+                    }
+                    Err(e) => {
+                        eprintln!("silo: uninstall failed: {e}");
+                    }
+                }
+            }
+        });
+        dialog.present(Some(&window_for_uninstall));
+    });
+
+    uninstall_group.add(&uninstall_row);
+    about_page.add(&uninstall_group);
+
     window.add(&behaviour_page);
     window.add(&rules_page);
     window.add(&about_page);
