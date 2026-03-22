@@ -1,7 +1,65 @@
 use adw::prelude::*;
 use silo_core::browser::BrowserEntry;
 use silo_core::config::{self, Config};
+use std::cell::RefCell;
+use std::rc::Rc;
 
+fn build_rules_group(
+    browsers: &[BrowserEntry],
+    config: &Config,
+    window: &adw::PreferencesWindow,
+) -> adw::PreferencesGroup {
+    let rules_group = adw::PreferencesGroup::builder()
+        .title("Domain rules")
+        .description("Links matching these domains open silently in the assigned browser")
+        .build();
+
+    for rule in &config.rules {
+        let browser_name = browsers
+            .iter()
+            .find(|b| {
+                b.desktop_file == rule.browser.desktop_file
+                    && b.profile_args.as_deref() == rule.browser.args.as_deref()
+            })
+            .map(|b| b.display_name.as_str())
+            .unwrap_or(&rule.browser.desktop_file);
+
+        let row = adw::ActionRow::builder()
+            .title(&rule.domain)
+            .subtitle(browser_name)
+            .build();
+
+        let delete_btn = gtk::Button::builder()
+            .icon_name("user-trash-symbolic")
+            .valign(gtk::Align::Center)
+            .css_classes(["flat"])
+            .build();
+
+        let domain_for_delete = rule.domain.clone();
+        let window_ref = window.clone();
+        delete_btn.connect_clicked(move |_| {
+            let mut config = config::load();
+            config.rules.retain(|r| r.domain != domain_for_delete);
+            if let Err(e) = config::save(&config) {
+                eprintln!("silo: failed to save config: {e}");
+            }
+            window_ref.close();
+        });
+
+        row.add_suffix(&delete_btn);
+        rules_group.add(&row);
+    }
+
+    if config.rules.is_empty() {
+        let empty_row = adw::ActionRow::builder()
+            .title("No rules yet")
+            .subtitle("Use 'Always use for [domain]' in the picker to create rules")
+            .build();
+        rules_group.add(&empty_row);
+    }
+
+    rules_group
+}
 
 pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) -> adw::PreferencesWindow {
     let window = adw::PreferencesWindow::builder()
@@ -96,56 +154,10 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
         .icon_name("view-list-symbolic")
         .build();
 
-    let rules_group = adw::PreferencesGroup::builder()
-        .title("Domain rules")
-        .description("Links matching these domains open silently in the assigned browser")
-        .build();
-
-    for rule in &config.rules {
-        let browser_name = browsers
-            .iter()
-            .find(|b| {
-                b.desktop_file == rule.browser.desktop_file
-                    && b.profile_args.as_deref() == rule.browser.args.as_deref()
-            })
-            .map(|b| b.display_name.as_str())
-            .unwrap_or(&rule.browser.desktop_file);
-
-        let row = adw::ActionRow::builder()
-            .title(&rule.domain)
-            .subtitle(browser_name)
-            .build();
-
-        let delete_btn = gtk::Button::builder()
-            .icon_name("user-trash-symbolic")
-            .valign(gtk::Align::Center)
-            .css_classes(["flat"])
-            .build();
-
-        let domain_for_delete = rule.domain.clone();
-        let window_ref = window.clone();
-        delete_btn.connect_clicked(move |_| {
-            let mut config = config::load();
-            config.rules.retain(|r| r.domain != domain_for_delete);
-            if let Err(e) = config::save(&config) {
-                eprintln!("silo: failed to save config: {e}");
-            }
-            window_ref.close();
-        });
-
-        row.add_suffix(&delete_btn);
-        rules_group.add(&row);
-    }
-
-    if config.rules.is_empty() {
-        let empty_row = adw::ActionRow::builder()
-            .title("No rules yet")
-            .subtitle("Use 'Always use for [domain]' in the picker to create rules")
-            .build();
-        rules_group.add(&empty_row);
-    }
-
+    let rules_group = build_rules_group(browsers, config, &window);
     rules_page.add(&rules_group);
+
+    let current_rules_group = Rc::new(RefCell::new(rules_group));
 
     // -- about --
 
@@ -243,6 +255,24 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
     window.add(&behaviour_page);
     window.add(&rules_page);
     window.add(&about_page);
+
+    // Refresh rules when window regains focus (e.g. after picker saves a new rule)
+    {
+        let rules_page = rules_page.clone();
+        let current_rules_group = current_rules_group.clone();
+        let browsers = browsers.to_vec();
+        window.connect_notify_local(Some("is-active"), move |win, _| {
+            if !win.is_active() {
+                return;
+            }
+            let config = config::load();
+            let old_group = current_rules_group.borrow().clone();
+            rules_page.remove(&old_group);
+            let new_group = build_rules_group(&browsers, &config, win);
+            rules_page.add(&new_group);
+            *current_rules_group.borrow_mut() = new_group;
+        });
+    }
 
     let browsers_clone = browsers.to_vec();
     window.connect_close_request(move |_| {
