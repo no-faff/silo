@@ -10,8 +10,13 @@ pub struct BrowserRef {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Rule {
-    pub domain: String,
-    pub browser: BrowserRef,
+    /// Domain pattern, optionally with path. e.g. "github.com", "*.corp.com",
+    /// "github.com/gist", "github.com/gist/*"
+    #[serde(alias = "domain")]
+    pub pattern: String,
+    /// None = exception rule (always show picker for this pattern).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub browser: Option<BrowserRef>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -32,6 +37,8 @@ pub struct Config {
     pub previous_default_browser: Option<String>,
     #[serde(default)]
     pub rules: Vec<Rule>,
+    #[serde(default)]
+    pub rules_suspended: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub picker_size: Option<WindowSize>,
 }
@@ -45,6 +52,7 @@ impl Default for Config {
             fallback_browser: None,
             previous_default_browser: None,
             rules: Vec::new(),
+            rules_suspended: false,
             picker_size: None,
         }
     }
@@ -122,12 +130,13 @@ mod tests {
             }),
             previous_default_browser: Some("chromium.desktop".to_string()),
             rules: vec![Rule {
-                domain: "github.com".to_string(),
-                browser: BrowserRef {
+                pattern: "github.com".to_string(),
+                browser: Some(BrowserRef {
                     desktop_file: "vivaldi-stable.desktop".to_string(),
                     args: Some("--profile-directory=Profile 1".to_string()),
-                },
+                }),
             }],
+            rules_suspended: false,
             picker_size: None,
         };
         let json = serde_json::to_string_pretty(&config).unwrap();
@@ -157,12 +166,13 @@ mod tests {
             fallback_browser: None,
             previous_default_browser: None,
             rules: vec![Rule {
-                domain: "example.com".to_string(),
-                browser: BrowserRef {
+                pattern: "example.com".to_string(),
+                browser: Some(BrowserRef {
                     desktop_file: "firefox.desktop".to_string(),
                     args: None,
-                },
+                }),
             }],
+            rules_suspended: false,
             picker_size: None,
         };
 
@@ -204,5 +214,37 @@ mod tests {
 
         // no .tmp left behind
         assert!(!dir.path().join("config.json.tmp").exists());
+    }
+
+    #[test]
+    fn old_config_with_domain_field_loads() {
+        let json = r#"{
+            "always_ask": false,
+            "remember_choice": true,
+            "setup_declined": false,
+            "fallback_browser": null,
+            "previous_default_browser": null,
+            "rules": [{
+                "domain": "github.com",
+                "browser": {
+                    "desktop_file": "firefox.desktop"
+                }
+            }]
+        }"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(config.rules[0].pattern, "github.com");
+        assert!(config.rules[0].browser.is_some());
+    }
+
+    #[test]
+    fn exception_rule_has_null_browser() {
+        let rule = Rule {
+            pattern: "example.com".to_string(),
+            browser: None,
+        };
+        let json = serde_json::to_string(&rule).unwrap();
+        assert!(!json.contains("browser"));
+        let parsed: Rule = serde_json::from_str(&json).unwrap();
+        assert!(parsed.browser.is_none());
     }
 }
