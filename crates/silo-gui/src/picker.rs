@@ -9,33 +9,60 @@ pub fn show(
     domain: Option<&str>,
     browsers: &[BrowserEntry],
     config: &Config,
+    was_redirected: bool,
 ) -> adw::ApplicationWindow {
     let url = url.to_string();
     let domain_str = domain.unwrap_or("").to_string();
 
+    // -- header bar with settings gear --
+
     let header = adw::HeaderBar::new();
 
-    let remember_title = if domain_str.is_empty() {
-        "Always use for this link".to_string()
-    } else {
-        format!("Always use for {}", domain_str)
-    };
-    let remember_row = adw::SwitchRow::builder()
-        .title(&remember_title)
-        .active(config.remember_choice)
+    let settings_btn = gtk::Button::builder()
+        .icon_name("emblem-system-symbolic")
+        .tooltip_text("Settings")
+        .css_classes(["flat"])
         .build();
 
-    let remember_list = gtk::ListBox::builder()
-        .selection_mode(gtk::SelectionMode::None)
-        .css_classes(["boxed-list"])
+    let app_for_settings = app.clone();
+    settings_btn.connect_clicked(move |_| {
+        let config = config::load();
+        let browsers = silo_core::browser::discover();
+        crate::settings::show(&app_for_settings, &config, &browsers);
+    });
+    header.pack_end(&settings_btn);
+
+    // -- domain hero display --
+
+    let domain_box = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .halign(gtk::Align::Center)
+        .margin_top(12)
+        .margin_bottom(8)
         .margin_start(12)
         .margin_end(12)
-        .margin_top(4)
-        .margin_bottom(12)
         .build();
-    remember_list.append(&remember_row);
 
-    remember_list.set_cursor_from_name(Some("pointer"));
+    if !domain_str.is_empty() {
+        let domain_label = gtk::Label::builder()
+            .label(&domain_str)
+            .css_classes(["title-1"])
+            .ellipsize(gtk::pango::EllipsizeMode::End)
+            .max_width_chars(40)
+            .build();
+        domain_box.append(&domain_label);
+    }
+
+    if was_redirected {
+        let redirect_label = gtk::Label::builder()
+            .label("Unwrapped from a redirect")
+            .css_classes(["dim-label", "caption"])
+            .margin_top(4)
+            .build();
+        domain_box.append(&redirect_label);
+    }
+
+    // -- browser list --
 
     let list_box = gtk::ListBox::builder()
         .selection_mode(gtk::SelectionMode::Single)
@@ -74,9 +101,31 @@ pub fn show(
         .vexpand(true)
         .build();
 
-    let content_box = gtk::Box::builder()
-        .orientation(gtk::Orientation::Vertical)
+    // -- remember toggle (at bottom) --
+
+    let remember_title = if domain_str.is_empty() {
+        "Always use for this link".to_string()
+    } else {
+        format!("Always use for {}", domain_str)
+    };
+    let remember_row = adw::SwitchRow::builder()
+        .title(&remember_title)
+        .active(config.remember_choice)
         .build();
+
+    let remember_list = gtk::ListBox::builder()
+        .selection_mode(gtk::SelectionMode::None)
+        .css_classes(["boxed-list"])
+        .margin_start(12)
+        .margin_end(12)
+        .margin_top(4)
+        .margin_bottom(4)
+        .build();
+    remember_list.append(&remember_row);
+    remember_list.set_cursor_from_name(Some("pointer"));
+
+    // -- bottom bar --
+
     let heart_btn = gtk::Button::builder()
         .icon_name("emblem-favorite-symbolic")
         .tooltip_text("Buy me a cuppa")
@@ -103,14 +152,20 @@ pub fn show(
         .orientation(gtk::Orientation::Horizontal)
         .halign(gtk::Align::Center)
         .spacing(4)
-        .margin_top(8)
+        .margin_top(4)
         .margin_bottom(8)
         .build();
     bottom_bar.append(&star_btn);
     bottom_bar.append(&heart_btn);
 
-    content_box.append(&remember_list);
+    // -- assemble layout --
+
+    let content_box = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .build();
+    content_box.append(&domain_box);
     content_box.append(&scrolled);
+    content_box.append(&remember_list);
     content_box.append(&bottom_bar);
 
     let toolbar = adw::ToolbarView::new();
@@ -130,6 +185,8 @@ pub fn show(
         .default_width(default_w)
         .default_height(default_h)
         .build();
+
+    // -- row activation handler --
 
     let browsers_clone = browsers.to_vec();
     let url_clone = url.clone();
@@ -156,7 +213,8 @@ pub fn show(
         }
     });
 
-    // number keys 1-9, 0, Escape
+    // -- keyboard shortcuts: 1-9, 0, Escape --
+
     let key_controller = gtk::EventControllerKey::new();
     let browsers_for_keys = browsers.to_vec();
     let url_for_keys = url.clone();
@@ -207,6 +265,13 @@ pub fn show(
 
     window.add_controller(key_controller);
 
+    // Auto-close when picker loses focus (user clicked elsewhere)
+    window.connect_notify_local(Some("is-active"), move |win, _| {
+        if !win.is_active() {
+            win.close();
+        }
+    });
+
     // modal so it takes focus even when settings is open behind
     window.set_modal(true);
     window.present();
@@ -231,13 +296,13 @@ fn save_choice(
 
     if remember_row.is_active() && !domain.is_empty() {
         let new_rule = Rule {
-            domain: domain.to_string(),
-            browser: BrowserRef {
+            pattern: domain.to_string(),
+            browser: Some(BrowserRef {
                 desktop_file: entry.desktop_file.clone(),
                 args: entry.profile_args.clone(),
-            },
+            }),
         };
-        config.rules.retain(|r| r.domain != domain);
+        config.rules.retain(|r| r.pattern != domain);
         config.rules.push(new_rule);
     }
 

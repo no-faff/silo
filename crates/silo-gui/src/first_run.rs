@@ -18,8 +18,8 @@ pub fn show(app: &adw::Application, url: Option<String>) {
             );
             return;
         }
-        let domain = silo_core::url::extract_domain(url);
-        let picker = crate::picker::show(app, url, domain.as_deref(), &browsers, &default_config);
+        let processed = silo_core::url::process_url(url);
+        let picker = crate::picker::show(app, &processed.final_url, processed.domain.as_deref(), &browsers, &default_config, processed.was_redirected);
         wire_response(dialog.clone());
         dialog.present(Some(&picker));
     } else {

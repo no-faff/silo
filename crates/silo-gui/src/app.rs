@@ -82,9 +82,9 @@ fn handle_url(app: &adw::Application, url: &str) {
     }
 
     let config = silo_core::config::load();
-    let domain = silo_core::url::extract_domain(url);
+    let processed = silo_core::url::process_url(url);
 
-    if domain.is_none() {
+    if processed.domain.is_none() {
         show_error_dialog(app, "Cannot open link", &format!("Received a malformed URL:\n\n{url}"));
         return;
     }
@@ -96,24 +96,41 @@ fn handle_url(app: &adw::Application, url: &str) {
         return;
     }
 
+    // Use the unwrapped URL for launching
+    let launch_url = &processed.final_url;
+
     if browsers.len() == 1 {
-        if let Err(e) = silo_core::launcher::launch(&browsers[0], url) {
+        if let Err(e) = silo_core::launcher::launch(&browsers[0], launch_url) {
             eprintln!("silo: {e}");
         }
         return;
     }
 
-    if let Some(ref domain) = domain
-        && let Some(rule) = silo_core::rule::find_matching_rule(&config.rules, domain)
-            && let Some(entry) = browsers.iter().find(|b| {
-                b.desktop_file == rule.browser.desktop_file
-                    && b.profile_args.as_deref() == rule.browser.args.as_deref()
-            }) {
-                if let Err(e) = silo_core::launcher::launch(entry, url) {
-                    eprintln!("silo: {e}");
+    let domain = processed.domain.as_deref().unwrap_or("");
+
+    // Check rules (unless suspended)
+    if !config.rules_suspended {
+        if let Some(rule) = silo_core::rule::find_matching_rule(&config.rules, domain, &processed.path) {
+            match &rule.browser {
+                Some(browser) => {
+                    // Normal rule: launch matching browser
+                    if let Some(entry) = browsers.iter().find(|b| {
+                        b.desktop_file == browser.desktop_file
+                            && b.profile_args.as_deref() == browser.args.as_deref()
+                    }) {
+                        if let Err(e) = silo_core::launcher::launch(entry, launch_url) {
+                            eprintln!("silo: {e}");
+                        }
+                        return;
+                    }
+                    // Browser not found (stale rule), fall through to picker
                 }
-                return;
+                None => {
+                    // Exception rule: always show picker (fall through)
+                }
             }
+        }
+    }
 
     if !config.always_ask
         && let Some(ref fallback) = config.fallback_browser
@@ -121,13 +138,13 @@ fn handle_url(app: &adw::Application, url: &str) {
                 b.desktop_file == fallback.desktop_file
                     && b.profile_args.as_deref() == fallback.args.as_deref()
             }) {
-                if let Err(e) = silo_core::launcher::launch(entry, url) {
+                if let Err(e) = silo_core::launcher::launch(entry, launch_url) {
                     eprintln!("silo: {e}");
                 }
                 return;
             }
 
-    crate::picker::show(app, url, domain.as_deref(), &browsers, &config);
+    crate::picker::show(app, launch_url, Some(domain), &browsers, &config, processed.was_redirected);
 }
 
 pub fn show_error_dialog(app: &adw::Application, heading: &str, body: &str) {

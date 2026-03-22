@@ -15,17 +15,20 @@ fn build_rules_group(
         .build();
 
     for rule in &config.rules {
-        let browser_name = browsers
-            .iter()
-            .find(|b| {
-                b.desktop_file == rule.browser.desktop_file
-                    && b.profile_args.as_deref() == rule.browser.args.as_deref()
-            })
-            .map(|b| b.display_name.as_str())
-            .unwrap_or(&rule.browser.desktop_file);
+        let browser_name = match &rule.browser {
+            Some(browser) => browsers
+                .iter()
+                .find(|b| {
+                    b.desktop_file == browser.desktop_file
+                        && b.profile_args.as_deref() == browser.args.as_deref()
+                })
+                .map(|b| b.display_name.as_str())
+                .unwrap_or(&browser.desktop_file),
+            None => "Always show picker",
+        };
 
         let row = adw::ActionRow::builder()
-            .title(&rule.domain)
+            .title(&rule.pattern)
             .subtitle(browser_name)
             .build();
 
@@ -35,11 +38,11 @@ fn build_rules_group(
             .css_classes(["flat"])
             .build();
 
-        let domain_for_delete = rule.domain.clone();
+        let pattern_for_delete = rule.pattern.clone();
         let window_ref = window.clone();
         delete_btn.connect_clicked(move |_| {
             let mut config = config::load();
-            config.rules.retain(|r| r.domain != domain_for_delete);
+            config.rules.retain(|r| r.pattern != pattern_for_delete);
             if let Err(e) = config::save(&config) {
                 eprintln!("silo: failed to save config: {e}");
             }
