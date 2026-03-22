@@ -1,6 +1,6 @@
 use adw::prelude::*;
 use silo_core::browser::BrowserEntry;
-use silo_core::config::{self, Config};
+use silo_core::config::{self, BrowserRef, Config, Rule};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -11,26 +11,59 @@ fn build_rules_group(
 ) -> adw::PreferencesGroup {
     let rules_group = adw::PreferencesGroup::builder()
         .title("Domain rules")
-        .description("Links matching these domains open silently in the assigned browser")
+        .description("Links matching these rules skip the picker and open in the assigned browser.")
         .build();
 
+    // "Add" button in group header
+    let add_btn = gtk::Button::builder()
+        .icon_name("list-add-symbolic")
+        .tooltip_text("Add rule")
+        .css_classes(["flat"])
+        .valign(gtk::Align::Center)
+        .build();
+
+    let browsers_for_add = browsers.to_vec();
+    let window_for_add = window.clone();
+    add_btn.connect_clicked(move |_| {
+        show_add_rule_dialog(&window_for_add, &browsers_for_add, None);
+    });
+    rules_group.set_header_suffix(Some(&add_btn));
+
+    let stale_rules = silo_core::rule::find_stale_rules(&config.rules, browsers);
+
     for rule in &config.rules {
+        let is_stale = stale_rules.iter().any(|s| std::ptr::eq(*s, rule));
+
         let browser_name = match &rule.browser {
-            Some(browser) => browsers
-                .iter()
-                .find(|b| {
-                    b.desktop_file == browser.desktop_file
-                        && b.profile_args.as_deref() == browser.args.as_deref()
-                })
-                .map(|b| b.display_name.as_str())
-                .unwrap_or(&browser.desktop_file),
-            None => "Always show picker",
+            Some(browser) => {
+                let name = browsers
+                    .iter()
+                    .find(|b| {
+                        b.desktop_file == browser.desktop_file
+                            && b.profile_args.as_deref() == browser.args.as_deref()
+                    })
+                    .map(|b| b.display_name.as_str())
+                    .unwrap_or(&browser.desktop_file);
+                if is_stale {
+                    format!("{name} (not found)")
+                } else {
+                    name.to_string()
+                }
+            }
+            None => "Always show picker".to_string(),
         };
 
         let row = adw::ActionRow::builder()
             .title(&rule.pattern)
-            .subtitle(browser_name)
+            .subtitle(&browser_name)
+            .activatable(true)
             .build();
+
+        if is_stale {
+            let warning = gtk::Image::from_icon_name("dialog-warning-symbolic");
+            warning.add_css_class("warning");
+            row.add_suffix(&warning);
+        }
 
         let delete_btn = gtk::Button::builder()
             .icon_name("user-trash-symbolic")
@@ -49,6 +82,14 @@ fn build_rules_group(
             window_ref.close();
         });
 
+        // Click row to edit
+        let browsers_for_edit = browsers.to_vec();
+        let window_for_edit = window.clone();
+        let rule_for_edit = rule.clone();
+        row.connect_activated(move |_| {
+            show_add_rule_dialog(&window_for_edit, &browsers_for_edit, Some(&rule_for_edit));
+        });
+
         row.add_suffix(&delete_btn);
         rules_group.add(&row);
     }
@@ -56,12 +97,126 @@ fn build_rules_group(
     if config.rules.is_empty() {
         let empty_row = adw::ActionRow::builder()
             .title("No rules yet")
-            .subtitle("Use 'Always use for [domain]' in the picker to create rules")
+            .subtitle("Add one above or use 'Always use for...' in the picker")
             .build();
         rules_group.add(&empty_row);
     }
 
     rules_group
+}
+
+fn show_add_rule_dialog(
+    window: &adw::PreferencesWindow,
+    browsers: &[BrowserEntry],
+    existing: Option<&Rule>,
+) {
+    let heading = if existing.is_some() { "Edit rule" } else { "Add rule" };
+
+    let pattern_row = adw::EntryRow::builder()
+        .title("Pattern")
+        .build();
+    pattern_row.set_text(
+        existing.map(|r| r.pattern.as_str()).unwrap_or("")
+    );
+
+    // Browser list: "Always show picker" + all detected browsers
+    let browser_names: Vec<String> = std::iter::once("Always show picker".to_string())
+        .chain(browsers.iter().map(|b| b.display_name.clone()))
+        .collect();
+    let model = gtk::StringList::new(
+        &browser_names.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+    );
+    let browser_row = adw::ComboRow::builder()
+        .title("Browser")
+        .model(&model)
+        .build();
+
+    // Pre-select browser if editing
+    if let Some(rule) = existing
+        && let Some(ref browser) = rule.browser
+        && let Some(pos) = browsers.iter().position(|b| {
+            b.desktop_file == browser.desktop_file
+                && b.profile_args.as_deref() == browser.args.as_deref()
+        }) {
+            browser_row.set_selected(pos as u32 + 1);
+        }
+
+    let hint = gtk::Label::builder()
+        .label("e.g. github.com, *.corp.com, github.com/gist")
+        .css_classes(["dim-label", "caption"])
+        .halign(gtk::Align::Start)
+        .margin_top(8)
+        .build();
+
+    let content = gtk::ListBox::builder()
+        .selection_mode(gtk::SelectionMode::None)
+        .css_classes(["boxed-list"])
+        .build();
+    content.append(&pattern_row);
+    content.append(&browser_row);
+
+    let outer = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(4)
+        .build();
+    outer.append(&content);
+    outer.append(&hint);
+
+    let dialog = adw::AlertDialog::builder()
+        .heading(heading)
+        .extra_child(&outer)
+        .build();
+
+    let save_id = if existing.is_some() { "save" } else { "add" };
+    let save_label = if existing.is_some() { "Save" } else { "Add" };
+    dialog.add_responses(&[("cancel", "Cancel"), (save_id, save_label)]);
+    dialog.set_response_appearance(save_id, adw::ResponseAppearance::Suggested);
+    dialog.set_default_response(Some(save_id));
+
+    let pattern_ref = pattern_row.clone();
+    let browser_ref = browser_row.clone();
+    let browsers_clone = browsers.to_vec();
+    let old_pattern = existing.map(|r| r.pattern.clone());
+    let window_ref = window.clone();
+
+    dialog.connect_response(None, move |_, response| {
+        if response == "cancel" {
+            return;
+        }
+
+        let pattern = pattern_ref.text().trim().to_string();
+        if pattern.is_empty() {
+            return;
+        }
+
+        let selected = browser_ref.selected();
+        let browser = if selected == 0 {
+            None
+        } else {
+            browsers_clone.get(selected as usize - 1).map(|b| BrowserRef {
+                desktop_file: b.desktop_file.clone(),
+                args: b.profile_args.clone(),
+            })
+        };
+
+        let mut config = config::load();
+
+        // Remove old rule if editing
+        if let Some(ref old) = old_pattern {
+            config.rules.retain(|r| r.pattern != *old);
+        }
+        // Remove any existing rule for this pattern
+        config.rules.retain(|r| r.pattern != pattern);
+
+        config.rules.push(Rule { pattern, browser });
+
+        if let Err(e) = config::save(&config) {
+            eprintln!("silo: failed to save config: {e}");
+        }
+        window_ref.close();
+    });
+
+    dialog.present(Some(window));
 }
 
 pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) -> adw::PreferencesWindow {
@@ -162,6 +317,29 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
 
     let current_rules_group = Rc::new(RefCell::new(rules_group));
 
+    // -- suspend rules --
+
+    let suspend_group = adw::PreferencesGroup::new();
+
+    let suspend_row = adw::SwitchRow::builder()
+        .title("Suspend rules")
+        .subtitle("Temporarily show the picker for all links, ignoring rules above")
+        .active(config.rules_suspended)
+        .build();
+
+    let window_for_suspend = window.clone();
+    suspend_row.connect_active_notify(move |row| {
+        let mut config = config::load();
+        config.rules_suspended = row.is_active();
+        if let Err(e) = config::save(&config) {
+            eprintln!("silo: failed to save config: {e}");
+        }
+        let _ = &window_for_suspend; // prevent unused warning
+    });
+
+    suspend_group.add(&suspend_row);
+    rules_page.add(&suspend_group);
+
     // -- about --
 
     let about_page = adw::PreferencesPage::builder()
@@ -259,7 +437,7 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
     window.add(&rules_page);
     window.add(&about_page);
 
-    // Refresh rules when window regains focus (e.g. after picker saves a new rule)
+    // Refresh rules when window regains focus
     {
         let rules_page = rules_page.clone();
         let current_rules_group = current_rules_group.clone();
