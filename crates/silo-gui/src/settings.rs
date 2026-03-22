@@ -879,11 +879,24 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
                 match silo_core::register::uninstall() {
                     Ok(()) => {
                         eprintln!("silo: uninstalled");
-                        win.close();
-                        std::process::exit(0);
+                        let done = adw::AlertDialog::builder()
+                            .heading("Silo has been uninstalled")
+                            .body("Your previous default browser has been restored.")
+                            .build();
+                        done.add_responses(&[("close", "Close")]);
+                        done.connect_response(None, move |_, _| {
+                            std::process::exit(0);
+                        });
+                        done.present(Some(&win));
                     }
                     Err(e) => {
                         eprintln!("silo: uninstall failed: {e}");
+                        let err = adw::AlertDialog::builder()
+                            .heading("Uninstall failed")
+                            .body(&format!("{e}"))
+                            .build();
+                        err.add_responses(&[("close", "Dismiss")]);
+                        err.present(Some(&win));
                     }
                 }
             }
