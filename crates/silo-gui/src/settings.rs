@@ -556,6 +556,119 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
     suspend_group.add(&suspend_row);
     rules_page.add(&suspend_group);
 
+    // -- open/test --
+
+    let open_page = adw::PreferencesPage::builder()
+        .title("Open")
+        .icon_name("globe-symbolic")
+        .build();
+
+    let test_group = adw::PreferencesGroup::builder()
+        .title("Test a link")
+        .description("Paste a URL to see how Silo would handle it, or open it in a specific browser.")
+        .build();
+
+    let url_row = adw::EntryRow::builder()
+        .title("Paste a URL to test")
+        .build();
+
+    let open_browser_row = adw::ComboRow::builder()
+        .title("Browser")
+        .build();
+
+    let open_browser_names: Vec<String> = browsers.iter().map(|b| b.display_name.clone()).collect();
+    let open_model = gtk::StringList::new(
+        &open_browser_names.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+    );
+    open_browser_row.set_model(Some(&open_model));
+
+    let open_btn = gtk::Button::builder()
+        .label("Open")
+        .css_classes(["suggested-action"])
+        .valign(gtk::Align::Center)
+        .build();
+
+    let url_for_open = url_row.clone();
+    let browser_for_open = open_browser_row.clone();
+    let browsers_for_open = browsers.to_vec();
+    open_btn.connect_clicked(move |_| {
+        let text = url_for_open.text().to_string();
+        if text.is_empty() {
+            return;
+        }
+        let processed = silo_core::url::process_url(&text);
+        let selected = browser_for_open.selected() as usize;
+        if let Some(entry) = browsers_for_open.get(selected) {
+            if let Err(e) = silo_core::launcher::launch(entry, &processed.final_url) {
+                eprintln!("silo: {e}");
+            }
+        }
+    });
+
+    open_browser_row.add_suffix(&open_btn);
+
+    let redirect_row = adw::ActionRow::builder()
+        .visible(false)
+        .build();
+    redirect_row.add_prefix(&gtk::Image::from_icon_name("mail-forward-symbolic"));
+
+    // Rewire the redirect display to use the row
+    let redirect_row_ref = redirect_row.clone();
+    url_row.connect_changed(move |row| {
+        let text = row.text().to_string();
+        if text.is_empty() {
+            redirect_row_ref.set_visible(false);
+            return;
+        }
+        let processed = silo_core::url::process_url(&text);
+        if processed.was_redirected {
+            redirect_row_ref.set_title("Unwrapped from redirect");
+            redirect_row_ref.set_subtitle(&processed.final_url);
+            redirect_row_ref.set_visible(true);
+        } else {
+            redirect_row_ref.set_visible(false);
+        }
+    });
+
+    test_group.add(&url_row);
+    test_group.add(&redirect_row);
+    test_group.add(&open_browser_row);
+
+    open_page.add(&test_group);
+
+    // -- safety check --
+
+    let safety_group = adw::PreferencesGroup::builder()
+        .title("Safety check")
+        .description("Check a URL against Google's Transparency Report for known threats.")
+        .build();
+
+    let check_btn_row = adw::ActionRow::builder()
+        .title("Check URL")
+        .subtitle("Opens the Transparency Report in your default browser")
+        .activatable(true)
+        .build();
+    check_btn_row.add_prefix(&gtk::Image::from_icon_name("security-high-symbolic"));
+
+    let url_for_check = url_row.clone();
+    check_btn_row.connect_activated(move |_| {
+        let text = url_for_check.text().to_string();
+        if text.is_empty() {
+            return;
+        }
+        let processed = silo_core::url::process_url(&text);
+        let report_url = format!(
+            "https://transparencyreport.google.com/safe-browsing/search?url={}",
+            gtk::glib::Uri::escape_string(&processed.final_url, None, true)
+        );
+        let _ = std::process::Command::new("xdg-open")
+            .arg(&report_url)
+            .spawn();
+    });
+
+    safety_group.add(&check_btn_row);
+    open_page.add(&safety_group);
+
     // -- about --
 
     let about_page = adw::PreferencesPage::builder()
@@ -784,6 +897,7 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
     window.add(&behaviour_page);
     window.add(&browsers_page);
     window.add(&rules_page);
+    window.add(&open_page);
     window.add(&about_page);
 
     // Refresh rules when window regains focus
