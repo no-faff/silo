@@ -31,8 +31,8 @@ pub fn show(app: &adw::Application, url: Option<String>) {
 
 fn build_dialog() -> adw::AlertDialog {
     let dialog = adw::AlertDialog::builder()
-        .heading("Set as default browser?")
-        .body("Silo needs to be your default browser to work.")
+        .heading("Welcome to Silo")
+        .body("Silo is a browser picker. When you click a link in any app, Silo lets you choose which browser or profile opens it.\n\nTo work, Silo needs to register as your default browser. Your current default will be saved and restored if you uninstall Silo.")
         .build();
 
     dialog.add_responses(&[("decline", "Not now"), ("accept", "Set as default")]);
