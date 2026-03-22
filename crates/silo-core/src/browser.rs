@@ -253,6 +253,46 @@ fn expand_entry(de: &desktop::DesktopEntry, entries: &mut Vec<BrowserEntry>) {
     }
 }
 
+/// Like discover(), but applies overrides (hiding, name changes) and appends
+/// custom browsers from the config.
+pub fn discover_with_config(config: &crate::config::Config) -> Vec<BrowserEntry> {
+    let mut entries = discover();
+
+    // Apply overrides
+    for entry in &mut entries {
+        if let Some(ov) = config.browser_overrides.iter().find(|o| {
+            o.desktop_file == entry.desktop_file
+                && o.profile_args.as_deref() == entry.profile_args.as_deref()
+        }) {
+            if let Some(ref name) = ov.display_name {
+                entry.display_name = name.clone();
+            }
+        }
+    }
+
+    // Remove hidden browsers
+    entries.retain(|e| {
+        !config.browser_overrides.iter().any(|o| {
+            o.desktop_file == e.desktop_file
+                && o.profile_args.as_deref() == e.profile_args.as_deref()
+                && o.hidden
+        })
+    });
+
+    // Append custom browsers
+    for cb in &config.custom_browsers {
+        entries.push(BrowserEntry {
+            desktop_file: format!("custom:{}", cb.name),
+            display_name: cb.name.clone(),
+            icon: "application-x-executable".to_string(),
+            profile_args: cb.args.clone(),
+            exec: cb.command.clone(),
+        });
+    }
+
+    entries
+}
+
 fn single_entry(de: &desktop::DesktopEntry) -> BrowserEntry {
     BrowserEntry {
         desktop_file: de.id.clone(),

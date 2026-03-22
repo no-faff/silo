@@ -27,7 +27,7 @@ pub fn show(
     let app_for_settings = app.clone();
     settings_btn.connect_clicked(move |_| {
         let config = config::load();
-        let browsers = silo_core::browser::discover();
+        let browsers = silo_core::browser::discover_with_config(&config);
         crate::settings::show(&app_for_settings, &config, &browsers);
     });
     header.pack_end(&settings_btn);

@@ -64,7 +64,7 @@ fn show_settings_or_first_run(app: &adw::Application, then_url: Option<String>) 
     }
 
     let config = silo_core::config::load();
-    let browsers = silo_core::browser::discover();
+    let browsers = silo_core::browser::discover_with_config(&config);
     crate::settings::show(app, &config, &browsers);
 }
 
@@ -89,7 +89,7 @@ fn handle_url(app: &adw::Application, url: &str) {
         return;
     }
 
-    let browsers = silo_core::browser::discover();
+    let browsers = silo_core::browser::discover_with_config(&config);
 
     if browsers.is_empty() {
         show_error_dialog(app, "No browsers found", "Install a browser and try again.");

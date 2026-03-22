@@ -219,6 +219,84 @@ fn show_add_rule_dialog(
     dialog.present(Some(window));
 }
 
+fn show_add_custom_browser_dialog(window: &adw::PreferencesWindow) {
+    let name_row = adw::EntryRow::builder()
+        .title("Name")
+        .build();
+
+    let command_row = adw::EntryRow::builder()
+        .title("Command")
+        .build();
+
+    let args_row = adw::EntryRow::builder()
+        .title("Arguments (optional)")
+        .build();
+
+    let hint = gtk::Label::builder()
+        .label("e.g. /usr/bin/qutebrowser")
+        .css_classes(["dim-label", "caption"])
+        .halign(gtk::Align::Start)
+        .margin_top(8)
+        .build();
+
+    let content = gtk::ListBox::builder()
+        .selection_mode(gtk::SelectionMode::None)
+        .css_classes(["boxed-list"])
+        .build();
+    content.append(&name_row);
+    content.append(&command_row);
+    content.append(&args_row);
+
+    let outer = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(4)
+        .build();
+    outer.append(&content);
+    outer.append(&hint);
+
+    let dialog = adw::AlertDialog::builder()
+        .heading("Add custom browser")
+        .extra_child(&outer)
+        .build();
+    dialog.add_responses(&[("cancel", "Cancel"), ("add", "Add")]);
+    dialog.set_response_appearance("add", adw::ResponseAppearance::Suggested);
+    dialog.set_default_response(Some("add"));
+
+    let name_ref = name_row.clone();
+    let command_ref = command_row.clone();
+    let args_ref = args_row.clone();
+    let window_ref = window.clone();
+
+    dialog.connect_response(None, move |_, response| {
+        if response == "cancel" {
+            return;
+        }
+
+        let name = name_ref.text().trim().to_string();
+        let command = command_ref.text().trim().to_string();
+        if name.is_empty() || command.is_empty() {
+            return;
+        }
+
+        let args_text = args_ref.text().trim().to_string();
+        let args = if args_text.is_empty() { None } else { Some(args_text) };
+
+        let mut config = config::load();
+        config.custom_browsers.push(config::CustomBrowser {
+            name,
+            command,
+            args,
+        });
+
+        if let Err(e) = config::save(&config) {
+            eprintln!("silo: failed to save config: {e}");
+        }
+        window_ref.close();
+    });
+
+    dialog.present(Some(window));
+}
+
 pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) -> adw::PreferencesWindow {
     let window = adw::PreferencesWindow::builder()
         .application(app)
@@ -304,6 +382,144 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
         status_group.add(&register_row);
         behaviour_page.add(&status_group);
     }
+
+    // -- browsers --
+
+    let browsers_page = adw::PreferencesPage::builder()
+        .title("Browsers")
+        .icon_name("web-browser-symbolic")
+        .build();
+
+    let all_browsers = silo_core::browser::discover();
+
+    let detected_group = adw::PreferencesGroup::builder()
+        .title("Detected browsers")
+        .description("Browsers and profiles found on your system. Hide any you do not use.")
+        .build();
+
+    let refresh_btn = gtk::Button::builder()
+        .icon_name("view-refresh-symbolic")
+        .tooltip_text("Re-detect browsers")
+        .css_classes(["flat"])
+        .valign(gtk::Align::Center)
+        .build();
+
+    let window_for_refresh = window.clone();
+    refresh_btn.connect_clicked(move |_| {
+        window_for_refresh.close();
+    });
+    detected_group.set_header_suffix(Some(&refresh_btn));
+
+    for entry in &all_browsers {
+        let is_hidden = config.browser_overrides.iter().any(|o| {
+            o.desktop_file == entry.desktop_file
+                && o.profile_args.as_deref() == entry.profile_args.as_deref()
+                && o.hidden
+        });
+
+        let row = adw::SwitchRow::builder()
+            .title(&entry.display_name)
+            .subtitle(&entry.desktop_file)
+            .active(!is_hidden)
+            .build();
+
+        let desktop_file = entry.desktop_file.clone();
+        let profile_args = entry.profile_args.clone();
+        row.connect_active_notify(move |row| {
+            let mut config = config::load();
+            let hidden = !row.is_active();
+
+            if let Some(ov) = config.browser_overrides.iter_mut().find(|o| {
+                o.desktop_file == desktop_file
+                    && o.profile_args.as_deref() == profile_args.as_deref()
+            }) {
+                ov.hidden = hidden;
+            } else if hidden {
+                config.browser_overrides.push(config::BrowserOverride {
+                    desktop_file: desktop_file.clone(),
+                    profile_args: profile_args.clone(),
+                    display_name: None,
+                    hidden,
+                });
+            }
+
+            // Clean up overrides that are back to default
+            config.browser_overrides.retain(|o| {
+                o.hidden || o.display_name.is_some()
+            });
+
+            if let Err(e) = config::save(&config) {
+                eprintln!("silo: failed to save config: {e}");
+            }
+        });
+
+        detected_group.add(&row);
+    }
+
+    browsers_page.add(&detected_group);
+
+    // -- custom browsers --
+
+    let custom_group = adw::PreferencesGroup::builder()
+        .title("Custom browsers")
+        .description("Add browsers that were not detected automatically.")
+        .build();
+
+    let add_custom_btn = gtk::Button::builder()
+        .icon_name("list-add-symbolic")
+        .tooltip_text("Add custom browser")
+        .css_classes(["flat"])
+        .valign(gtk::Align::Center)
+        .build();
+
+    let window_for_custom = window.clone();
+    add_custom_btn.connect_clicked(move |_| {
+        show_add_custom_browser_dialog(&window_for_custom);
+    });
+    custom_group.set_header_suffix(Some(&add_custom_btn));
+
+    for (i, cb) in config.custom_browsers.iter().enumerate() {
+        let subtitle = match &cb.args {
+            Some(args) => format!("{} {}", cb.command, args),
+            None => cb.command.clone(),
+        };
+
+        let row = adw::ActionRow::builder()
+            .title(&cb.name)
+            .subtitle(&subtitle)
+            .build();
+
+        let delete_btn = gtk::Button::builder()
+            .icon_name("user-trash-symbolic")
+            .valign(gtk::Align::Center)
+            .css_classes(["flat"])
+            .build();
+
+        let window_for_del = window.clone();
+        let idx = i;
+        delete_btn.connect_clicked(move |_| {
+            let mut config = config::load();
+            if idx < config.custom_browsers.len() {
+                config.custom_browsers.remove(idx);
+                if let Err(e) = config::save(&config) {
+                    eprintln!("silo: failed to save config: {e}");
+                }
+            }
+            window_for_del.close();
+        });
+
+        row.add_suffix(&delete_btn);
+        custom_group.add(&row);
+    }
+
+    if config.custom_browsers.is_empty() {
+        let empty_row = adw::ActionRow::builder()
+            .title("No custom browsers")
+            .build();
+        custom_group.add(&empty_row);
+    }
+
+    browsers_page.add(&custom_group);
 
     // -- rules --
 
@@ -434,6 +650,7 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
     about_page.add(&uninstall_group);
 
     window.add(&behaviour_page);
+    window.add(&browsers_page);
     window.add(&rules_page);
     window.add(&about_page);
 

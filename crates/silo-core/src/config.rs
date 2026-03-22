@@ -20,6 +20,25 @@ pub struct Rule {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CustomBrowser {
+    pub name: String,
+    pub command: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BrowserOverride {
+    pub desktop_file: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_args: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(default)]
+    pub hidden: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WindowSize {
     pub width: i32,
     pub height: i32,
@@ -39,6 +58,10 @@ pub struct Config {
     pub rules: Vec<Rule>,
     #[serde(default)]
     pub rules_suspended: bool,
+    #[serde(default)]
+    pub custom_browsers: Vec<CustomBrowser>,
+    #[serde(default)]
+    pub browser_overrides: Vec<BrowserOverride>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub picker_size: Option<WindowSize>,
 }
@@ -53,6 +76,8 @@ impl Default for Config {
             previous_default_browser: None,
             rules: Vec::new(),
             rules_suspended: false,
+            custom_browsers: Vec::new(),
+            browser_overrides: Vec::new(),
             picker_size: None,
         }
     }
@@ -136,8 +161,7 @@ mod tests {
                     args: Some("--profile-directory=Profile 1".to_string()),
                 }),
             }],
-            rules_suspended: false,
-            picker_size: None,
+            ..Config::default()
         };
         let json = serde_json::to_string_pretty(&config).unwrap();
         let parsed: Config = serde_json::from_str(&json).unwrap();
@@ -172,8 +196,7 @@ mod tests {
                     args: None,
                 }),
             }],
-            rules_suspended: false,
-            picker_size: None,
+            ..Config::default()
         };
 
         save_to(&config, &path).unwrap();
