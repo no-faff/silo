@@ -610,6 +610,138 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
     info_group.add(&donate_row);
     about_page.add(&info_group);
 
+    // -- registration status --
+
+    let registration_group = adw::PreferencesGroup::builder()
+        .title("Registration")
+        .build();
+
+    let is_default = std::process::Command::new("xdg-settings")
+        .args(["get", "default-web-browser"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "com.nofaff.Silo.desktop")
+        .unwrap_or(false);
+
+    if is_default {
+        let status_row = adw::ActionRow::builder()
+            .title("Silo is your default browser")
+            .subtitle("Links from other apps are routed through Silo")
+            .build();
+        status_row.add_prefix(&gtk::Image::from_icon_name("emblem-ok-symbolic"));
+        registration_group.add(&status_row);
+    } else {
+        let status_row = adw::ActionRow::builder()
+            .title("Silo is not your default browser")
+            .subtitle("Links from other apps will not be routed through Silo")
+            .build();
+
+        let register_btn = gtk::Button::builder()
+            .label("Set as default")
+            .valign(gtk::Align::Center)
+            .css_classes(["suggested-action"])
+            .build();
+
+        let window_for_reg2 = window.clone();
+        register_btn.connect_clicked(move |_| {
+            match silo_core::register::set_default_browser() {
+                Ok(previous) => {
+                    let mut config = config::load();
+                    config.setup_declined = false;
+                    config.previous_default_browser = previous;
+                    let _ = config::save(&config);
+                    window_for_reg2.close();
+                }
+                Err(e) => {
+                    eprintln!("silo: {e}");
+                }
+            }
+        });
+
+        status_row.add_suffix(&register_btn);
+        registration_group.add(&status_row);
+    }
+
+    about_page.add(&registration_group);
+
+    // -- config export/import --
+
+    let config_group = adw::PreferencesGroup::builder()
+        .title("Back up your settings")
+        .build();
+
+    let export_row = adw::ActionRow::builder()
+        .title("Export config")
+        .subtitle("Save your settings and rules to a file")
+        .activatable(true)
+        .build();
+    export_row.add_prefix(&gtk::Image::from_icon_name("document-save-symbolic"));
+
+    let window_for_export = window.clone();
+    export_row.connect_activated(move |_| {
+        let dialog = gtk::FileDialog::builder()
+            .title("Export Silo config")
+            .initial_name("silo-config.json")
+            .build();
+
+        let filter = gtk::FileFilter::new();
+        filter.add_pattern("*.json");
+        filter.set_name(Some("JSON files"));
+        let filters = gtk::gio::ListStore::new::<gtk::FileFilter>();
+        filters.append(&filter);
+        dialog.set_filters(Some(&filters));
+
+        let win_ref = window_for_export.clone();
+        dialog.save(Some(&window_for_export), gtk::gio::Cancellable::NONE, move |result| {
+            if let Ok(file) = result {
+                if let Some(path) = file.path() {
+                    let source = config::config_path();
+                    if let Err(e) = std::fs::copy(&source, &path) {
+                        eprintln!("silo: export failed: {e}");
+                    }
+                }
+                let _ = &win_ref;
+            }
+        });
+    });
+
+    let import_row = adw::ActionRow::builder()
+        .title("Import config")
+        .subtitle("Load settings and rules from a file. This replaces your current config.")
+        .activatable(true)
+        .build();
+    import_row.add_prefix(&gtk::Image::from_icon_name("document-open-symbolic"));
+
+    let window_for_import = window.clone();
+    import_row.connect_activated(move |_| {
+        let dialog = gtk::FileDialog::builder()
+            .title("Import Silo config")
+            .build();
+
+        let filter = gtk::FileFilter::new();
+        filter.add_pattern("*.json");
+        filter.set_name(Some("JSON files"));
+        let filters = gtk::gio::ListStore::new::<gtk::FileFilter>();
+        filters.append(&filter);
+        dialog.set_filters(Some(&filters));
+
+        let win_ref = window_for_import.clone();
+        dialog.open(Some(&window_for_import), gtk::gio::Cancellable::NONE, move |result| {
+            if let Ok(file) = result {
+                if let Some(path) = file.path() {
+                    let imported = config::load_from(&path);
+                    if let Err(e) = config::save(&imported) {
+                        eprintln!("silo: import save failed: {e}");
+                    }
+                    win_ref.close();
+                }
+            }
+        });
+    });
+
+    config_group.add(&export_row);
+    config_group.add(&import_row);
+    about_page.add(&config_group);
+
     let uninstall_group = adw::PreferencesGroup::new();
     let uninstall_row = adw::ActionRow::builder()
         .title("Uninstall Silo")
