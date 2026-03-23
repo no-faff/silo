@@ -20,6 +20,8 @@ fn on_command_line(
     app: &adw::Application,
     cmd: &gio::ApplicationCommandLine,
 ) -> gtk::glib::ExitCode {
+    silo_core::register::install_icon();
+
     let args = cmd.arguments();
     let args: Vec<String> = args
         .iter()
@@ -144,7 +146,7 @@ fn handle_url(app: &adw::Application, url: &str) {
                 return;
             }
 
-    crate::picker::show(app, launch_url, Some(domain), &browsers, &config, processed.was_redirected);
+    crate::picker::show(app, launch_url, Some(domain), &browsers, &config, processed.was_redirected, processed.office_doc);
 }
 
 pub fn show_error_dialog(app: &adw::Application, heading: &str, body: &str) {

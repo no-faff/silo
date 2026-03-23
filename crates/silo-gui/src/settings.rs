@@ -298,98 +298,152 @@ fn show_add_custom_browser_dialog(window: &adw::PreferencesWindow) {
 }
 
 pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) -> adw::PreferencesWindow {
+    show_on_page(app, config, browsers, None)
+}
+
+pub fn show_on_page(
+    app: &adw::Application,
+    config: &Config,
+    browsers: &[BrowserEntry],
+    page: Option<&str>,
+) -> adw::PreferencesWindow {
     let window = adw::PreferencesWindow::builder()
         .application(app)
         .title("Silo")
         .default_width(550)
-        .default_height(500)
+        .default_height(680)
         .build();
 
-    // -- behaviour --
+    // -- welcome --
 
-    let behaviour_page = adw::PreferencesPage::builder()
-        .title("Behaviour")
-        .icon_name("preferences-system-symbolic")
+    let welcome_page = adw::PreferencesPage::builder()
+        .title("Welcome")
+        .icon_name("go-home-symbolic")
+        .name("welcome")
         .build();
 
-    let always_ask_row = adw::SwitchRow::builder()
-        .title("Always ask")
-        .subtitle("Show the picker every time, even if no rule matches")
-        .active(config.always_ask)
+    let welcome_group = adw::PreferencesGroup::builder()
+        .description("Silo lets you choose which browser opens your links.\n\nWhen you click a link in an email, chat or any app, Silo pops up with a list of your browsers and their profiles. You choose one, Silo disappears and the link opens in your chosen browser.\n\nIf you toggle on the \u{201c}Always use for\u{2026}\u{201d} switch in the picker, links to that domain will always open silently in the selected browser.\n\nUse the <b>Browsers</b> tab to hide browsers or profiles you don\u{2019}t use. The <b>Rules</b> tab lets you set domains that should always open in a specific browser, and decide what happens when no rule matches. The <b>Open</b> tab lets you paste a URL and open it in any browser, or check it for safety.\n\nSilo also unwraps tracking redirects. If a link has been wrapped by Outlook SafeLinks or Google, Silo strips the wrapper and shows you where it really goes.")
         .build();
 
-    let fallback_row = adw::ComboRow::builder()
-        .title("Fallback browser")
-        .subtitle("When 'Always ask' is off, links without a matching rule open here silently")
-        .build();
+    welcome_page.add(&welcome_group);
 
-    let browser_names: Vec<String> = std::iter::once("None".to_string())
-        .chain(browsers.iter().map(|b| b.display_name.clone()))
-        .collect();
-    let model = gtk::StringList::new(
-        &browser_names
-            .iter()
-            .map(|s| s.as_str())
-            .collect::<Vec<_>>(),
-    );
-    fallback_row.set_model(Some(&model));
+    // -- setup --
 
-    if let Some(ref fb) = config.fallback_browser
-        && let Some(pos) = browsers.iter().position(|b| {
-            b.desktop_file == fb.desktop_file
-                && b.profile_args.as_deref() == fb.args.as_deref()
-        }) {
-            fallback_row.set_selected(pos as u32 + 1);
+    let current_default_desktop = std::process::Command::new("xdg-settings")
+        .args(["get", "default-web-browser"])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+
+    let is_default = current_default_desktop == "com.nofaff.Silo.desktop";
+
+    let setup_description = if is_default {
+        "Silo is intercepting your links.".to_string()
+    } else {
+        // Look up the base browser name from the .desktop file, not from
+        // the profile list (profiles are a Silo concept, not a system one)
+        let current_name = silo_core::desktop::find_by_id(&current_default_desktop)
+            .map(|entry| entry.name);
+
+        match current_name {
+            Some(name) => format!("You need to do this to allow Silo to work. Your current default, {name}, has been saved and will be restored if you uninstall Silo."),
+            None => "You need to do this to allow Silo to work.".to_string(),
         }
+    };
 
-    let behaviour_group = adw::PreferencesGroup::builder()
-        .description("Links matching a rule always open in the assigned browser. For everything else, Silo either shows the picker or sends the link to your fallback browser.")
+    let setup_group = adw::PreferencesGroup::builder()
+        .title("Silo needs to be your default browser")
+        .description(&setup_description)
         .build();
-    behaviour_group.add(&always_ask_row);
-    behaviour_group.add(&fallback_row);
-    behaviour_page.add(&behaviour_group);
 
-    // -- registration status --
+    let status_row = adw::ActionRow::builder()
+        .title("Silo is your default browser")
+        .subtitle("You're all set")
+        .visible(is_default)
+        .build();
+    status_row.add_prefix(&gtk::Image::from_icon_name("emblem-ok-symbolic"));
+    setup_group.add(&status_row);
 
-    if config.setup_declined {
-        let status_group = adw::PreferencesGroup::new();
-        let register_row = adw::ActionRow::builder()
-            .title("Silo is not your default browser")
-            .subtitle("Links from other apps will not be routed through Silo")
-            .build();
+    welcome_page.add(&setup_group);
 
-        let register_btn = gtk::Button::builder()
-            .label("Set as default")
-            .valign(gtk::Align::Center)
-            .css_classes(["suggested-action"])
-            .build();
+    let btn_group = adw::PreferencesGroup::builder()
+        .visible(!is_default)
+        .build();
 
-        let window_for_reg = window.clone();
-        register_btn.connect_clicked(move |_| {
-            match silo_core::register::set_default_browser() {
-                Ok(previous) => {
-                    let mut config = config::load();
-                    config.setup_declined = false;
-                    config.previous_default_browser = previous;
-                    let _ = config::save(&config);
-                    window_for_reg.close();
-                }
-                Err(e) => {
-                    eprintln!("silo: {e}");
-                }
-            }
+    let register_btn = gtk::Button::builder()
+        .label("Set as default browser")
+        .css_classes(["suggested-action", "pill"])
+        .halign(gtk::Align::Center)
+        .build();
+
+    let status_row_ref = status_row.clone();
+    let setup_group_ref = setup_group.clone();
+    let btn_group_ref = btn_group.clone();
+    register_btn.connect_clicked(move |btn| {
+        btn.set_sensitive(false);
+        btn.set_label("Setting up, please wait...");
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            tx.send(silo_core::register::set_default_browser()).ok();
         });
 
-        register_row.add_suffix(&register_btn);
-        status_group.add(&register_row);
-        behaviour_page.add(&status_group);
+        let status_row = status_row_ref.clone();
+        let setup_group = setup_group_ref.clone();
+        let btn_group = btn_group_ref.clone();
+        let btn_ref = btn.clone();
+        gtk::glib::idle_add_local(move || match rx.try_recv() {
+            Ok(result) => {
+                match result {
+                    Ok(previous) => {
+                        let mut config = config::load();
+                        config.setup_declined = false;
+                        config.previous_default_browser = previous;
+                        let _ = config::save(&config);
+                        setup_group.set_title("Done");
+                        setup_group.set_description(Some("Silo is intercepting your links."));
+                        status_row.set_visible(true);
+                        btn_group.set_visible(false);
+                    }
+                    Err(e) => {
+                        eprintln!("silo: {e}");
+                        btn_ref.set_label("Set as default browser");
+                        btn_ref.set_sensitive(true);
+                        setup_group.set_description(Some(&format!("Registration failed: {e}. Try again.")));
+                    }
+                }
+                gtk::glib::ControlFlow::Break
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
+            Err(_) => gtk::glib::ControlFlow::Break,
+        });
+    });
+
+    btn_group.add(&adw::PreferencesRow::builder().child(&register_btn).build());
+
+    // Remove card styling from this group
+    let provider = gtk::CssProvider::new();
+    provider.load_from_string(".bare-group { margin-top: -12px; } .bare-group list.boxed-list { background: none; box-shadow: none; border: none; }");
+    if let Some(display) = gtk::gdk::Display::default() {
+        gtk::style_context_add_provider_for_display(
+            &display,
+            &provider,
+            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
     }
+    btn_group.add_css_class("bare-group");
+
+    welcome_page.add(&btn_group);
 
     // -- browsers --
 
     let browsers_page = adw::PreferencesPage::builder()
         .title("Browsers")
-        .icon_name("web-browser-symbolic")
+        .icon_name("view-app-grid-symbolic")
+        .name("browsers")
         .build();
 
     let all_browsers = silo_core::browser::discover();
@@ -407,8 +461,12 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
         .build();
 
     let window_for_refresh = window.clone();
+    let app_for_refresh = app.clone();
     refresh_btn.connect_clicked(move |_| {
         window_for_refresh.close();
+        let config = config::load();
+        let browsers = silo_core::browser::discover_with_config(&config);
+        show_on_page(&app_for_refresh, &config, &browsers, Some("browsers"));
     });
     detected_group.set_header_suffix(Some(&refresh_btn));
 
@@ -530,18 +588,72 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
         .icon_name("view-list-symbolic")
         .build();
 
+    // Unmatched links behaviour
+    let unmatched_group = adw::PreferencesGroup::builder()
+        .description("Would you like unmatched links to go to a specific browser silently, or always see the picker?")
+        .build();
+
+    let unmatched_row = adw::ComboRow::builder()
+        .title("When no rule matches")
+        .build();
+
+    let unmatched_names: Vec<String> = std::iter::once("Show the picker".to_string())
+        .chain(browsers.iter().map(|b| b.display_name.clone()))
+        .collect();
+    let unmatched_model = gtk::StringList::new(
+        &unmatched_names
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>(),
+    );
+    unmatched_row.set_model(Some(&unmatched_model));
+
+    if !config.always_ask {
+        if let Some(ref fb) = config.fallback_browser
+            && let Some(pos) = browsers.iter().position(|b| {
+                b.desktop_file == fb.desktop_file
+                    && b.profile_args.as_deref() == fb.args.as_deref()
+            }) {
+                unmatched_row.set_selected(pos as u32 + 1);
+            }
+    }
+
+    let browsers_for_unmatched = browsers.to_vec();
+    unmatched_row.connect_selected_notify(move |row| {
+        let mut config = config::load();
+        let selected = row.selected();
+        if selected == 0 {
+            config.always_ask = true;
+            config.fallback_browser = None;
+        } else {
+            config.always_ask = false;
+            config.fallback_browser = browsers_for_unmatched.get(selected as usize - 1).map(|b| {
+                silo_core::config::BrowserRef {
+                    desktop_file: b.desktop_file.clone(),
+                    args: b.profile_args.clone(),
+                }
+            });
+        }
+        if let Err(e) = config::save(&config) {
+            eprintln!("silo: failed to save config: {e}");
+        }
+    });
+
+    unmatched_group.add(&unmatched_row);
+    rules_page.add(&unmatched_group);
+
+    // Domain rules
     let rules_group = build_rules_group(browsers, config, &window);
     rules_page.add(&rules_group);
 
     let current_rules_group = Rc::new(RefCell::new(rules_group));
 
-    // -- suspend rules --
-
+    // Suspend rules
     let suspend_group = adw::PreferencesGroup::new();
 
     let suspend_row = adw::SwitchRow::builder()
         .title("Suspend rules")
-        .subtitle("Temporarily show the picker for all links, ignoring rules above")
+        .subtitle("Temporarily ignore all rules and show the picker")
         .active(config.rules_suspended)
         .build();
 
@@ -552,26 +664,123 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
         if let Err(e) = config::save(&config) {
             eprintln!("silo: failed to save config: {e}");
         }
-        let _ = &window_for_suspend; // prevent unused warning
+        let _ = &window_for_suspend;
     });
 
     suspend_group.add(&suspend_row);
     rules_page.add(&suspend_group);
 
-    // -- open/test --
+    // Export/import
+    let config_group = adw::PreferencesGroup::builder()
+        .title("Back up your settings")
+        .build();
+
+    let export_row = adw::ActionRow::builder()
+        .title("Export config")
+        .subtitle("Save your settings and rules to a file")
+        .activatable(true)
+        .build();
+    export_row.add_prefix(&gtk::Image::from_icon_name("document-save-symbolic"));
+
+    let window_for_export = window.clone();
+    export_row.connect_activated(move |_| {
+        let dialog = gtk::FileDialog::builder()
+            .title("Export Silo config")
+            .initial_name("silo-config.json")
+            .build();
+
+        let filter = gtk::FileFilter::new();
+        filter.add_pattern("*.json");
+        filter.set_name(Some("JSON files"));
+        let filters = gtk::gio::ListStore::new::<gtk::FileFilter>();
+        filters.append(&filter);
+        dialog.set_filters(Some(&filters));
+
+        let win_ref = window_for_export.clone();
+        dialog.save(Some(&window_for_export), gtk::gio::Cancellable::NONE, move |result| {
+            if let Ok(file) = result {
+                if let Some(path) = file.path() {
+                    let source = config::config_path();
+                    match std::fs::copy(&source, &path) {
+                        Ok(_) => {
+                            let toast = adw::Toast::new("Config exported");
+                            win_ref.add_toast(toast);
+                        }
+                        Err(e) => {
+                            eprintln!("silo: export failed: {e}");
+                            let toast = adw::Toast::new("Export failed");
+                            win_ref.add_toast(toast);
+                        }
+                    }
+                }
+            }
+        });
+    });
+
+    let import_row = adw::ActionRow::builder()
+        .title("Import config")
+        .subtitle("Load settings and rules from a file. This replaces your current config.")
+        .activatable(true)
+        .build();
+    import_row.add_prefix(&gtk::Image::from_icon_name("document-open-symbolic"));
+
+    let window_for_import = window.clone();
+    import_row.connect_activated(move |_| {
+        let dialog = gtk::FileDialog::builder()
+            .title("Import Silo config")
+            .build();
+
+        let filter = gtk::FileFilter::new();
+        filter.add_pattern("*.json");
+        filter.set_name(Some("JSON files"));
+        let filters = gtk::gio::ListStore::new::<gtk::FileFilter>();
+        filters.append(&filter);
+        dialog.set_filters(Some(&filters));
+
+        let win_ref = window_for_import.clone();
+        dialog.open(Some(&window_for_import), gtk::gio::Cancellable::NONE, move |result| {
+            if let Ok(file) = result {
+                if let Some(path) = file.path() {
+                    match config::try_load_from(&path) {
+                        Ok(imported) => {
+                            if let Err(e) = config::save(&imported) {
+                                eprintln!("silo: import save failed: {e}");
+                            }
+                            win_ref.close();
+                        }
+                        Err(e) => {
+                            eprintln!("silo: invalid config file: {e}");
+                            let err = adw::AlertDialog::builder()
+                                .heading("Import failed")
+                                .body("The file is not a valid Silo config.")
+                                .build();
+                            err.add_responses(&[("close", "Dismiss")]);
+                            err.present(Some(&win_ref));
+                        }
+                    }
+                }
+            }
+        });
+    });
+
+    config_group.add(&export_row);
+    config_group.add(&import_row);
+    rules_page.add(&config_group);
+
+    // -- open --
 
     let open_page = adw::PreferencesPage::builder()
         .title("Open")
         .icon_name("globe-symbolic")
         .build();
 
-    let test_group = adw::PreferencesGroup::builder()
-        .title("Test a link")
-        .description("Paste a URL to see how Silo would handle it, or open it in a specific browser.")
+    let open_group = adw::PreferencesGroup::builder()
+        .title("Open a link")
+        .description("Paste a URL and choose which browser to open it in.")
         .build();
 
     let url_row = adw::EntryRow::builder()
-        .title("Paste a URL to test")
+        .title("URL")
         .build();
 
     let open_browser_row = adw::ComboRow::builder()
@@ -614,32 +823,43 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
         .build();
     redirect_row.add_prefix(&gtk::Image::from_icon_name("mail-forward-symbolic"));
 
-    // Rewire the redirect display to use the row
     let redirect_row_ref = redirect_row.clone();
+    let debounce_id: Rc<RefCell<Option<gtk::glib::SourceId>>> = Rc::new(RefCell::new(None));
     url_row.connect_changed(move |row| {
         let text = row.text().to_string();
         if text.is_empty() {
             redirect_row_ref.set_visible(false);
             return;
         }
-        let processed = silo_core::url::process_url(&text);
-        if processed.was_redirected {
-            redirect_row_ref.set_title("Unwrapped from redirect");
-            redirect_row_ref.set_subtitle(&processed.final_url);
-            redirect_row_ref.set_visible(true);
-        } else {
-            redirect_row_ref.set_visible(false);
+
+        // Cancel any pending debounce
+        if let Some(id) = debounce_id.borrow_mut().take() {
+            id.remove();
         }
+
+        let redirect_row = redirect_row_ref.clone();
+        let debounce = debounce_id.clone();
+        let id = gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(300), move || {
+            let processed = silo_core::url::process_url(&text);
+            if processed.was_redirected {
+                redirect_row.set_title("Unwrapped from redirect");
+                redirect_row.set_subtitle(&processed.final_url);
+                redirect_row.set_visible(true);
+            } else {
+                redirect_row.set_visible(false);
+            }
+            *debounce.borrow_mut() = None;
+        });
+        *debounce_id.borrow_mut() = Some(id);
     });
 
-    test_group.add(&url_row);
-    test_group.add(&redirect_row);
-    test_group.add(&open_browser_row);
+    open_group.add(&url_row);
+    open_group.add(&redirect_row);
+    open_group.add(&open_browser_row);
 
-    open_page.add(&test_group);
+    open_page.add(&open_group);
 
-    // -- safety check --
-
+    // Safety check
     let safety_group = adw::PreferencesGroup::builder()
         .title("Safety check")
         .description("Check a URL against Google's Transparency Report for known threats.")
@@ -647,12 +867,14 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
 
     let check_btn_row = adw::ActionRow::builder()
         .title("Check URL")
-        .subtitle("Opens the Transparency Report in your default browser")
+        .subtitle("Opens the Transparency Report in the browser selected above")
         .activatable(true)
         .build();
     check_btn_row.add_prefix(&gtk::Image::from_icon_name("security-high-symbolic"));
 
     let url_for_check = url_row.clone();
+    let browser_for_check = open_browser_row.clone();
+    let browsers_for_check = browsers.to_vec();
     check_btn_row.connect_activated(move |_| {
         let text = url_for_check.text().to_string();
         if text.is_empty() {
@@ -663,9 +885,12 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
             "https://transparencyreport.google.com/safe-browsing/search?url={}",
             gtk::glib::Uri::escape_string(&processed.final_url, None, true)
         );
-        let _ = std::process::Command::new("xdg-open")
-            .arg(&report_url)
-            .spawn();
+        let selected = browser_for_check.selected() as usize;
+        if let Some(entry) = browsers_for_check.get(selected) {
+            if let Err(e) = silo_core::launcher::launch(entry, &report_url) {
+                eprintln!("silo: {e}");
+            }
+        }
     });
 
     safety_group.add(&check_btn_row);
@@ -679,7 +904,7 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
         .build();
 
     let info_group = adw::PreferencesGroup::builder()
-        .title("Silo 1.0.0")
+        .title(&format!("Silo {}", env!("CARGO_PKG_VERSION")))
         .description("Browser picker with profile support. MIT licence.")
         .build();
 
@@ -690,10 +915,10 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
         .build();
     github_row.add_prefix(&gtk::Image::from_icon_name("starred-symbolic"));
     github_row.add_suffix(&gtk::Image::from_icon_name("external-link-symbolic"));
-    github_row.connect_activated(|_| {
-        let _ = std::process::Command::new("xdg-open")
-            .arg("https://github.com/no-faff/silo")
-            .spawn();
+    let window_for_github = window.clone();
+    github_row.connect_activated(move |_| {
+        let launcher = gtk::UriLauncher::new("https://github.com/no-faff/silo");
+        launcher.launch(Some(&window_for_github), gtk::gio::Cancellable::NONE, |_| {});
     });
 
     let issue_row = adw::ActionRow::builder()
@@ -702,10 +927,10 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
         .build();
     issue_row.add_prefix(&gtk::Image::from_icon_name("mail-send-symbolic"));
     issue_row.add_suffix(&gtk::Image::from_icon_name("external-link-symbolic"));
-    issue_row.connect_activated(|_| {
-        let _ = std::process::Command::new("xdg-open")
-            .arg("https://github.com/no-faff/silo/issues")
-            .spawn();
+    let window_for_issue = window.clone();
+    issue_row.connect_activated(move |_| {
+        let launcher = gtk::UriLauncher::new("https://github.com/no-faff/silo/issues");
+        launcher.launch(Some(&window_for_issue), gtk::gio::Cancellable::NONE, |_| {});
     });
 
     let donate_row = adw::ActionRow::builder()
@@ -714,10 +939,10 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
         .build();
     donate_row.add_prefix(&gtk::Image::from_icon_name("emblem-favorite-symbolic"));
     donate_row.add_suffix(&gtk::Image::from_icon_name("external-link-symbolic"));
-    donate_row.connect_activated(|_| {
-        let _ = std::process::Command::new("xdg-open")
-            .arg("https://nofaff.netlify.app")
-            .spawn();
+    let window_for_donate = window.clone();
+    donate_row.connect_activated(move |_| {
+        let launcher = gtk::UriLauncher::new("https://nofaff.netlify.app");
+        launcher.launch(Some(&window_for_donate), gtk::gio::Cancellable::NONE, |_| {});
     });
 
     info_group.add(&github_row);
@@ -725,165 +950,71 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
     info_group.add(&donate_row);
     about_page.add(&info_group);
 
-    // -- registration status --
+    // -- uninstall --
 
-    let registration_group = adw::PreferencesGroup::builder()
-        .title("Registration")
+    let uninstall_page = adw::PreferencesPage::builder()
+        .title("Uninstall")
+        .icon_name("user-trash-symbolic")
         .build();
 
-    let is_default = std::process::Command::new("xdg-settings")
-        .args(["get", "default-web-browser"])
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "com.nofaff.Silo.desktop")
-        .unwrap_or(false);
-
-    if is_default {
-        let status_row = adw::ActionRow::builder()
-            .title("Silo is your default browser")
-            .subtitle("Links from other apps are routed through Silo")
-            .build();
-        status_row.add_prefix(&gtk::Image::from_icon_name("emblem-ok-symbolic"));
-        registration_group.add(&status_row);
-    } else {
-        let status_row = adw::ActionRow::builder()
-            .title("Silo is not your default browser")
-            .subtitle("Links from other apps will not be routed through Silo")
-            .build();
-
-        let register_btn = gtk::Button::builder()
-            .label("Set as default")
-            .valign(gtk::Align::Center)
-            .css_classes(["suggested-action"])
-            .build();
-
-        let window_for_reg2 = window.clone();
-        register_btn.connect_clicked(move |_| {
-            match silo_core::register::set_default_browser() {
-                Ok(previous) => {
-                    let mut config = config::load();
-                    config.setup_declined = false;
-                    config.previous_default_browser = previous;
-                    let _ = config::save(&config);
-                    window_for_reg2.close();
-                }
-                Err(e) => {
-                    eprintln!("silo: {e}");
-                }
-            }
+    let previous_browser_name = config.previous_default_browser.as_deref()
+        .and_then(|desktop_file| {
+            silo_core::desktop::find_by_id(desktop_file)
+                .map(|entry| entry.name)
         });
 
-        status_row.add_suffix(&register_btn);
-        registration_group.add(&status_row);
-    }
+    let (uninstall_description, uninstall_subtitle) = match &previous_browser_name {
+        Some(name) => (
+            format!("This removes Silo from your system and restores {name} as your default browser."),
+            format!("Remove Silo and restore {name} as your default browser"),
+        ),
+        None => (
+            "This removes Silo from your system. Your default browser was not recorded, so you may need to set one manually afterwards.".to_string(),
+            "Remove Silo from your system".to_string(),
+        ),
+    };
 
-    about_page.add(&registration_group);
-
-    // -- config export/import --
-
-    let config_group = adw::PreferencesGroup::builder()
-        .title("Back up your settings")
+    let uninstall_group = adw::PreferencesGroup::builder()
+        .description(&uninstall_description)
         .build();
 
-    let export_row = adw::ActionRow::builder()
-        .title("Export config")
-        .subtitle("Save your settings and rules to a file")
-        .activatable(true)
-        .build();
-    export_row.add_prefix(&gtk::Image::from_icon_name("document-save-symbolic"));
-
-    let window_for_export = window.clone();
-    export_row.connect_activated(move |_| {
-        let dialog = gtk::FileDialog::builder()
-            .title("Export Silo config")
-            .initial_name("silo-config.json")
-            .build();
-
-        let filter = gtk::FileFilter::new();
-        filter.add_pattern("*.json");
-        filter.set_name(Some("JSON files"));
-        let filters = gtk::gio::ListStore::new::<gtk::FileFilter>();
-        filters.append(&filter);
-        dialog.set_filters(Some(&filters));
-
-        let win_ref = window_for_export.clone();
-        dialog.save(Some(&window_for_export), gtk::gio::Cancellable::NONE, move |result| {
-            if let Ok(file) = result {
-                if let Some(path) = file.path() {
-                    let source = config::config_path();
-                    if let Err(e) = std::fs::copy(&source, &path) {
-                        eprintln!("silo: export failed: {e}");
-                    }
-                }
-                let _ = &win_ref;
-            }
-        });
-    });
-
-    let import_row = adw::ActionRow::builder()
-        .title("Import config")
-        .subtitle("Load settings and rules from a file. This replaces your current config.")
-        .activatable(true)
-        .build();
-    import_row.add_prefix(&gtk::Image::from_icon_name("document-open-symbolic"));
-
-    let window_for_import = window.clone();
-    import_row.connect_activated(move |_| {
-        let dialog = gtk::FileDialog::builder()
-            .title("Import Silo config")
-            .build();
-
-        let filter = gtk::FileFilter::new();
-        filter.add_pattern("*.json");
-        filter.set_name(Some("JSON files"));
-        let filters = gtk::gio::ListStore::new::<gtk::FileFilter>();
-        filters.append(&filter);
-        dialog.set_filters(Some(&filters));
-
-        let win_ref = window_for_import.clone();
-        dialog.open(Some(&window_for_import), gtk::gio::Cancellable::NONE, move |result| {
-            if let Ok(file) = result {
-                if let Some(path) = file.path() {
-                    let imported = config::load_from(&path);
-                    if let Err(e) = config::save(&imported) {
-                        eprintln!("silo: import save failed: {e}");
-                    }
-                    win_ref.close();
-                }
-            }
-        });
-    });
-
-    config_group.add(&export_row);
-    config_group.add(&import_row);
-    about_page.add(&config_group);
-
-    let uninstall_group = adw::PreferencesGroup::new();
     let uninstall_row = adw::ActionRow::builder()
         .title("Uninstall Silo")
-        .subtitle("Remove Silo and restore your previous default browser")
+        .subtitle(&uninstall_subtitle)
         .activatable(true)
         .build();
     uninstall_row.add_prefix(&gtk::Image::from_icon_name("user-trash-symbolic"));
 
     let window_for_uninstall = window.clone();
+    let prev_name_for_uninstall = previous_browser_name.clone();
     uninstall_row.connect_activated(move |_| {
+        let confirm_body = match &prev_name_for_uninstall {
+            Some(name) => format!("This will remove Silo, its config and rules, and restore {name} as your default browser."),
+            None => "This will remove Silo, its config and rules. You may need to set a default browser manually afterwards.".to_string(),
+        };
+
         let dialog = adw::AlertDialog::builder()
             .heading("Uninstall Silo?")
-            .body("This will remove Silo, its config and rules, and restore your previous default browser.")
+            .body(&confirm_body)
             .build();
         dialog.add_responses(&[("cancel", "Cancel"), ("uninstall", "Uninstall")]);
         dialog.set_response_appearance("uninstall", adw::ResponseAppearance::Destructive);
         dialog.set_default_response(Some("cancel"));
 
         let win = window_for_uninstall.clone();
+        let prev_name = prev_name_for_uninstall.clone();
         dialog.connect_response(None, move |_, response| {
             if response == "uninstall" {
                 match silo_core::register::uninstall() {
                     Ok(()) => {
                         eprintln!("silo: uninstalled");
+                        let done_body = match &prev_name {
+                            Some(name) => format!("{name} has been restored as your default browser."),
+                            None => "You may need to set a default browser manually.".to_string(),
+                        };
                         let done = adw::AlertDialog::builder()
                             .heading("Silo has been uninstalled")
-                            .body("Your previous default browser has been restored.")
+                            .body(&done_body)
                             .build();
                         done.add_responses(&[("close", "Close")]);
                         done.connect_response(None, move |_, _| {
@@ -907,13 +1038,23 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
     });
 
     uninstall_group.add(&uninstall_row);
-    about_page.add(&uninstall_group);
+    uninstall_page.add(&uninstall_group);
 
-    window.add(&behaviour_page);
+    // -- assemble window --
+
+    window.add(&welcome_page);
     window.add(&browsers_page);
     window.add(&rules_page);
     window.add(&open_page);
     window.add(&about_page);
+    window.add(&uninstall_page);
+
+    // Show the requested page, or welcome if not registered
+    if let Some(name) = page {
+        window.set_visible_page_name(name);
+    } else if !is_default {
+        window.set_visible_page_name("welcome");
+    }
 
     // Refresh rules when window regains focus
     {
@@ -933,33 +1074,42 @@ pub fn show(app: &adw::Application, config: &Config, browsers: &[BrowserEntry]) 
         });
     }
 
-    let browsers_clone = browsers.to_vec();
-    window.connect_close_request(move |_| {
-        // Don't recreate the config if it was just deleted (uninstall)
-        if !config::exists() {
+    window.connect_close_request(move |win| {
+        if is_default {
             return gtk::glib::Propagation::Proceed;
         }
 
-        let mut config = config::load();
-        config.always_ask = always_ask_row.is_active();
+        // Check if Silo is now the default browser
+        let now_default = std::process::Command::new("xdg-settings")
+            .args(["get", "default-web-browser"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "com.nofaff.Silo.desktop")
+            .unwrap_or(false);
 
-        let selected = fallback_row.selected();
-        config.fallback_browser = if selected == 0 {
-            None
-        } else {
-            browsers_clone.get(selected as usize - 1).map(|b| {
-                silo_core::config::BrowserRef {
-                    desktop_file: b.desktop_file.clone(),
-                    args: b.profile_args.clone(),
-                }
-            })
-        };
-
-        if let Err(e) = config::save(&config) {
-            eprintln!("silo: failed to save config: {e}");
+        if now_default {
+            return gtk::glib::Propagation::Proceed;
         }
 
-        gtk::glib::Propagation::Proceed
+        // Not default yet: warn the user
+        let dialog = adw::AlertDialog::builder()
+            .heading("Silo is not your default browser")
+            .body("Silo won\u{2019}t be able to intercept links until you set it as the default browser.")
+            .build();
+        dialog.add_responses(&[("close", "Close anyway"), ("back", "Go back")]);
+        dialog.set_response_appearance("close", adw::ResponseAppearance::Destructive);
+        dialog.set_default_response(Some("back"));
+
+        let win_ref = win.clone();
+        dialog.connect_response(None, move |_, response| {
+            if response == "close" {
+                win_ref.destroy();
+            } else {
+                win_ref.set_visible_page_name("welcome");
+            }
+        });
+        dialog.present(Some(win));
+
+        gtk::glib::Propagation::Stop
     });
 
     window.present();

@@ -10,6 +10,7 @@ pub fn show(
     browsers: &[BrowserEntry],
     config: &Config,
     was_redirected: bool,
+    office_doc: Option<silo_core::url::OfficeDocType>,
 ) -> adw::ApplicationWindow {
     let url = url.to_string();
     let domain_str = domain.unwrap_or("").to_string();
@@ -62,6 +63,20 @@ pub fn show(
         domain_box.append(&redirect_label);
     }
 
+    if let Some(doc_type) = office_doc {
+        let label = match doc_type {
+            silo_core::url::OfficeDocType::Spreadsheet => "Spreadsheet",
+            silo_core::url::OfficeDocType::Document => "Document",
+            silo_core::url::OfficeDocType::Presentation => "Presentation",
+        };
+        let doc_label = gtk::Label::builder()
+            .label(label)
+            .css_classes(["dim-label", "caption"])
+            .margin_top(4)
+            .build();
+        domain_box.append(&doc_label);
+    }
+
     // -- browser list --
 
     let list_box = gtk::ListBox::builder()
@@ -103,14 +118,10 @@ pub fn show(
 
     // -- remember toggle (at bottom) --
 
-    let remember_title = if domain_str.is_empty() {
-        "Always use for this link".to_string()
-    } else {
-        format!("Always use for {}", domain_str)
-    };
     let remember_row = adw::SwitchRow::builder()
-        .title(&remember_title)
+        .title(&format!("Always use for {}", domain_str))
         .active(config.remember_choice)
+        .visible(!domain_str.is_empty())
         .build();
 
     let remember_list = gtk::ListBox::builder()
@@ -266,12 +277,6 @@ pub fn show(
     window.add_controller(key_controller);
 
     // Auto-close when picker loses focus (user clicked elsewhere)
-    window.connect_notify_local(Some("is-active"), move |win, _| {
-        if !win.is_active() {
-            win.close();
-        }
-    });
-
     // modal so it takes focus even when settings is open behind
     window.set_modal(true);
     window.present();

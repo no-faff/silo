@@ -77,6 +77,26 @@ pub fn parse(path: &std::path::Path) -> Option<DesktopEntry> {
     })
 }
 
+/// Finds a .desktop file by its ID (e.g. "org.mozilla.firefox.desktop")
+/// by searching the standard applications directories.
+pub fn find_by_id(id: &str) -> Option<DesktopEntry> {
+    let search_dirs = [
+        dirs::data_dir().map(|d| d.join("applications")),
+        Some(std::path::PathBuf::from("/usr/share/applications")),
+        Some(std::path::PathBuf::from("/usr/local/share/applications")),
+        dirs::home_dir().map(|d| d.join(".local/share/flatpak/exports/share/applications")),
+        Some(std::path::PathBuf::from("/var/lib/flatpak/exports/share/applications")),
+    ];
+
+    for dir in search_dirs.into_iter().flatten() {
+        let path = dir.join(id);
+        if let Some(entry) = parse(&path) {
+            return Some(entry);
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

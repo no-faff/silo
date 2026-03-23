@@ -99,6 +99,15 @@ pub fn load() -> Config {
     load_from(&config_path())
 }
 
+/// Tries to load a config file, returning an error if the file is missing
+/// or contains invalid JSON. Use this for import validation.
+pub fn try_load_from(path: &std::path::Path) -> Result<Config, String> {
+    let contents = std::fs::read_to_string(path)
+        .map_err(|e| format!("could not read file: {e}"))?;
+    serde_json::from_str(&contents)
+        .map_err(|e| format!("invalid config: {e}"))
+}
+
 /// Returns default config if the file is missing or corrupt.
 pub fn load_from(path: &std::path::Path) -> Config {
     match std::fs::read_to_string(path) {
