@@ -68,7 +68,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             always_ask: false,
-            remember_choice: true,
+            remember_choice: false,
             fallback_browser: None,
             previous_default_browser: None,
             rules: Vec::new(),

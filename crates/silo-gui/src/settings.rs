@@ -369,7 +369,7 @@ pub fn show_on_page(
     if is_default {
         let status_row = adw::ActionRow::builder()
             .title("Silo is your default browser")
-            .subtitle("You're all set")
+            .subtitle("You can close this window now. Silo will appear when you click a link.")
             .build();
         status_row.add_prefix(&gtk::Image::from_icon_name("emblem-ok-symbolic"));
         setup_group.add(&status_row);
