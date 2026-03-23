@@ -111,8 +111,8 @@ fn handle_url(app: &adw::Application, url: &str) {
     let domain = processed.domain.as_deref().unwrap_or("");
 
     // Check rules (unless suspended)
-    if !config.rules_suspended {
-        if let Some(rule) = silo_core::rule::find_matching_rule(&config.rules, domain, &processed.path) {
+    if !config.rules_suspended
+        && let Some(rule) = silo_core::rule::find_matching_rule(&config.rules, domain, &processed.path) {
             match &rule.browser {
                 Some(browser) => {
                     // Normal rule: launch matching browser
@@ -132,7 +132,6 @@ fn handle_url(app: &adw::Application, url: &str) {
                 }
             }
         }
-    }
 
     if !config.always_ask
         && let Some(ref fallback) = config.fallback_browser

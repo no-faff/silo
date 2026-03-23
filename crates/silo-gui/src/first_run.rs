@@ -32,7 +32,11 @@ pub fn show(app: &adw::Application, url: Option<String>) {
             return;
         }
         let processed = silo_core::url::process_url(url);
-        crate::picker::show(app, &processed.final_url, processed.domain.as_deref(), &browsers, &default_config, processed.was_redirected, processed.office_doc);
+        if processed.domain.is_none() {
+            crate::app::show_error_dialog(app, "Cannot open link", &format!("Received a malformed URL:\n\n{url}"));
+        } else {
+            crate::picker::show(app, &processed.final_url, processed.domain.as_deref(), &browsers, &default_config, processed.was_redirected, processed.office_doc);
+        }
     }
 
     crate::settings::show_on_page(app, &default_config, &browsers, Some("welcome"));

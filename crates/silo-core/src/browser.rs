@@ -373,11 +373,10 @@ pub fn discover_with_config(config: &crate::config::Config) -> Vec<BrowserEntry>
         if let Some(ov) = config.browser_overrides.iter().find(|o| {
             o.desktop_file == entry.desktop_file
                 && o.profile_args.as_deref() == entry.profile_args.as_deref()
-        }) {
-            if let Some(ref name) = ov.display_name {
+        })
+            && let Some(ref name) = ov.display_name {
                 entry.display_name = name.clone();
             }
-        }
     }
 
     // Remove hidden browsers

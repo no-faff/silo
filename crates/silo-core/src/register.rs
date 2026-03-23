@@ -226,7 +226,7 @@ pub fn uninstall() -> Result<(), String> {
     if current == DESKTOP_FILENAME {
         // Try the recorded previous browser, otherwise find any installed browser
         let fallback = config.previous_default_browser.clone()
-            .or_else(|| find_any_browser());
+            .or_else(find_any_browser);
 
         if let Some(ref browser) = fallback {
             let _ = Command::new("xdg-settings")

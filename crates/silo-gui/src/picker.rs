@@ -119,7 +119,7 @@ pub fn show(
     // -- remember toggle (at bottom) --
 
     let remember_row = adw::SwitchRow::builder()
-        .title(&format!("Always use for {}", domain_str))
+        .title(format!("Always use for {}", domain_str))
         .subtitle("Creates a rule. You can remove it in Settings.")
         .active(config.remember_choice)
         .visible(!domain_str.is_empty())

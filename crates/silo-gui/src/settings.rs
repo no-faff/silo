@@ -343,7 +343,7 @@ pub fn show_on_page(
     // -- setup --
 
     let current_default_desktop = silo_core::register::get_default_browser();
-    let is_default = silo_core::register::is_silo_default();
+    let is_default = current_default_desktop == "com.nofaff.Silo.desktop";
 
     let setup_description = if is_default {
         "Silo is intercepting your links.".to_string()
@@ -632,15 +632,14 @@ pub fn show_on_page(
     );
     unmatched_row.set_model(Some(&unmatched_model));
 
-    if !config.always_ask {
-        if let Some(ref fb) = config.fallback_browser
+    if !config.always_ask
+        && let Some(ref fb) = config.fallback_browser
             && let Some(pos) = browsers.iter().position(|b| {
                 b.desktop_file == fb.desktop_file
                     && b.profile_args.as_deref() == fb.args.as_deref()
             }) {
                 unmatched_row.set_selected(pos as u32 + 1);
             }
-    }
 
     let browsers_for_unmatched = browsers.to_vec();
     unmatched_row.connect_selected_notify(move |row| {
@@ -722,8 +721,8 @@ pub fn show_on_page(
 
         let win_ref = window_for_export.clone();
         dialog.save(Some(&window_for_export), gtk::gio::Cancellable::NONE, move |result| {
-            if let Ok(file) = result {
-                if let Some(path) = file.path() {
+            if let Ok(file) = result
+                && let Some(path) = file.path() {
                     let source = config::config_path();
                     match std::fs::copy(&source, &path) {
                         Ok(_) => {
@@ -737,7 +736,6 @@ pub fn show_on_page(
                         }
                     }
                 }
-            }
         });
     });
 
@@ -763,8 +761,8 @@ pub fn show_on_page(
 
         let win_ref = window_for_import.clone();
         dialog.open(Some(&window_for_import), gtk::gio::Cancellable::NONE, move |result| {
-            if let Ok(file) = result {
-                if let Some(path) = file.path() {
+            if let Ok(file) = result
+                && let Some(path) = file.path() {
                     match config::try_load_from(&path) {
                         Ok(imported) => {
                             let confirm = adw::AlertDialog::builder()
@@ -805,7 +803,6 @@ pub fn show_on_page(
                         }
                     }
                 }
-            }
         });
     });
 
@@ -858,11 +855,10 @@ pub fn show_on_page(
         }
         let processed = silo_core::url::process_url(&text);
         let selected = browser_for_open.selected() as usize;
-        if let Some(entry) = browsers_for_open.get(selected) {
-            if let Err(e) = silo_core::launcher::launch(entry, &processed.final_url) {
+        if let Some(entry) = browsers_for_open.get(selected)
+            && let Err(e) = silo_core::launcher::launch(entry, &processed.final_url) {
                 eprintln!("silo: {e}");
             }
-        }
     });
 
     open_browser_row.add_suffix(&open_btn);
@@ -945,11 +941,10 @@ pub fn show_on_page(
             gtk::glib::Uri::escape_string(&processed.final_url, None, true)
         );
         let selected = browser_for_check.selected() as usize;
-        if let Some(entry) = browsers_for_check.get(selected) {
-            if let Err(e) = silo_core::launcher::launch(entry, &report_url) {
+        if let Some(entry) = browsers_for_check.get(selected)
+            && let Err(e) = silo_core::launcher::launch(entry, &report_url) {
                 eprintln!("silo: {e}");
             }
-        }
     });
 
     safety_group.add(&check_btn_row);
@@ -963,7 +958,7 @@ pub fn show_on_page(
         .build();
 
     let info_group = adw::PreferencesGroup::builder()
-        .title(&format!("Silo {}", env!("CARGO_PKG_VERSION")))
+        .title(format!("Silo {}", env!("CARGO_PKG_VERSION")))
         .description("Browser picker with profile support. MIT licence.")
         .build();
 
@@ -1085,7 +1080,7 @@ pub fn show_on_page(
                         eprintln!("silo: uninstall failed: {e}");
                         let err = adw::AlertDialog::builder()
                             .heading("Uninstall failed")
-                            .body(&format!("{e}"))
+                            .body(e.to_string())
                             .build();
                         err.add_responses(&[("close", "Dismiss")]);
                         err.present(Some(&win));
