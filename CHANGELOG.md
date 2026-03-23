@@ -5,13 +5,13 @@
 A large release that brings Silo to feature parity with BrowserPicker
 on Windows and beyond what any other Linux browser picker offers.
 
+### New features
+
 **Flatpak and Snap support**
 - Profile detection now checks Flatpak paths (`~/.var/app/`) and Snap
   paths (`~/snap/`) alongside standard locations
 - Browsers installed via Flatpak or Snap are detected and their
   profiles expanded correctly
-
-### New features
 
 **Redirect unwrapping**
 - Outlook SafeLinks URLs are unwrapped to show the real destination

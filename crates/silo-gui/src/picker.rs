@@ -38,7 +38,7 @@ pub fn show(
     let domain_box = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .halign(gtk::Align::Center)
-        .margin_top(12)
+        .margin_top(4)
         .margin_bottom(8)
         .margin_start(12)
         .margin_end(12)
@@ -77,12 +77,24 @@ pub fn show(
         domain_box.append(&doc_label);
     }
 
+    if !domain_str.is_empty() {
+        let hint_label = gtk::Label::builder()
+            .label("Choose a browser, or click Always to set a rule.")
+            .css_classes(["dim-label", "caption"])
+            .margin_top(6)
+            .build();
+        domain_box.append(&hint_label);
+    }
+
     // -- browser list --
 
     let list_box = gtk::ListBox::builder()
         .selection_mode(gtk::SelectionMode::Single)
         .css_classes(["boxed-list"])
         .build();
+
+    let show_always = !domain_str.is_empty();
+    let mut always_buttons: Vec<gtk::Button> = Vec::new();
 
     for (i, entry) in browsers.iter().enumerate() {
         let shortcut = match i {
@@ -100,6 +112,18 @@ pub fn show(
         icon.set_pixel_size(32);
         row.add_prefix(&icon);
 
+        if show_always {
+            let always_btn = gtk::Button::builder()
+                .label("Always")
+                .css_classes(["caption"])
+                .valign(gtk::Align::Center)
+                .tooltip_text(&format!("Always open {} in {}", domain_str, entry.display_name))
+                .build();
+
+            row.add_suffix(&always_btn);
+            always_buttons.push(always_btn);
+        }
+
         if !shortcut.is_empty() {
             let shortcut_label = gtk::Label::builder()
                 .label(&shortcut)
@@ -116,26 +140,6 @@ pub fn show(
         .vexpand(true)
         .build();
 
-    // -- remember toggle (at bottom) --
-
-    let remember_row = adw::SwitchRow::builder()
-        .title(format!("Always use for {}", domain_str))
-        .subtitle("Creates a rule. You can remove it in Settings.")
-        .active(config.remember_choice)
-        .visible(!domain_str.is_empty())
-        .build();
-
-    let remember_list = gtk::ListBox::builder()
-        .selection_mode(gtk::SelectionMode::None)
-        .css_classes(["boxed-list"])
-        .margin_start(12)
-        .margin_end(12)
-        .margin_top(4)
-        .margin_bottom(4)
-        .build();
-    remember_list.append(&remember_row);
-    remember_list.set_cursor_from_name(Some("pointer"));
-
     // -- assemble layout --
 
     let content_box = gtk::Box::builder()
@@ -143,7 +147,6 @@ pub fn show(
         .build();
     content_box.append(&domain_box);
     content_box.append(&scrolled);
-    content_box.append(&remember_list);
 
     let toolbar = adw::ToolbarView::new();
     toolbar.add_top_bar(&header);
@@ -153,7 +156,7 @@ pub fn show(
         .picker_size
         .as_ref()
         .map(|s| (s.width, s.height))
-        .unwrap_or((450, 500));
+        .unwrap_or((450, 580));
 
     let window = adw::ApplicationWindow::builder()
         .application(app)
@@ -163,18 +166,16 @@ pub fn show(
         .default_height(default_h)
         .build();
 
-    // -- row activation handler --
+    // -- row activation handler (open once, no rule) --
 
     let browsers_clone = browsers.to_vec();
     let url_clone = url.clone();
-    let domain_clone = domain_str.clone();
-    let remember_ref = remember_row.clone();
     let window_ref = window.clone();
 
     list_box.connect_row_activated(move |_, row| {
         let index = row.index() as usize;
         if let Some(entry) = browsers_clone.get(index) {
-            save_choice(&remember_ref, &domain_clone, entry, &window_ref);
+            save_window_size(&window_ref);
 
             if let Err(e) = silo_core::launcher::launch(entry, &url_clone) {
                 let dialog = adw::AlertDialog::builder()
@@ -190,13 +191,34 @@ pub fn show(
         }
     });
 
+    // -- wire up "Always" buttons now that the window exists --
+
+    for (i, btn) in always_buttons.into_iter().enumerate() {
+        let entry = browsers[i].clone();
+        let url_for_btn = url.clone();
+        let domain_for_btn = domain_str.clone();
+        let win_for_btn = window.clone();
+
+        btn.connect_clicked(move |_| {
+            save_rule(&domain_for_btn, &entry, &win_for_btn);
+            if let Err(e) = silo_core::launcher::launch(&entry, &url_for_btn) {
+                let dialog = adw::AlertDialog::builder()
+                    .heading("Failed to open browser")
+                    .body(&e)
+                    .build();
+                dialog.add_responses(&[("close", "Dismiss")]);
+                dialog.present(Some(&win_for_btn));
+                return;
+            }
+            win_for_btn.close();
+        });
+    }
+
     // -- keyboard shortcuts: 1-9, 0, Escape --
 
     let key_controller = gtk::EventControllerKey::new();
     let browsers_for_keys = browsers.to_vec();
     let url_for_keys = url.clone();
-    let domain_for_keys = domain_str.clone();
-    let remember_for_keys = remember_row.clone();
     let window_for_keys = window.clone();
 
     key_controller.connect_key_pressed(move |_, keyval, _, _| {
@@ -221,7 +243,7 @@ pub fn show(
 
         if let Some(i) = index
             && let Some(entry) = browsers_for_keys.get(i) {
-                save_choice(&remember_for_keys, &domain_for_keys, entry, &window_for_keys);
+                save_window_size(&window_for_keys);
 
                 if let Err(e) = silo_core::launcher::launch(entry, &url_for_keys) {
                     let dialog = adw::AlertDialog::builder()
@@ -256,14 +278,24 @@ pub fn show(
     window
 }
 
-fn save_choice(
-    remember_row: &adw::SwitchRow,
+fn save_window_size(window: &adw::ApplicationWindow) {
+    let mut config = config::load();
+    let (w, h) = window.default_size();
+    config.picker_size = Some(silo_core::config::WindowSize {
+        width: w,
+        height: h,
+    });
+    if let Err(e) = config::save(&config) {
+        eprintln!("silo: failed to save config: {e}");
+    }
+}
+
+fn save_rule(
     domain: &str,
     entry: &BrowserEntry,
     window: &adw::ApplicationWindow,
 ) {
     let mut config = config::load();
-    config.remember_choice = remember_row.is_active();
 
     let (w, h) = window.default_size();
     config.picker_size = Some(silo_core::config::WindowSize {
@@ -271,17 +303,15 @@ fn save_choice(
         height: h,
     });
 
-    if remember_row.is_active() && !domain.is_empty() {
-        let new_rule = Rule {
-            pattern: domain.to_string(),
-            browser: Some(BrowserRef {
-                desktop_file: entry.desktop_file.clone(),
-                args: entry.profile_args.clone(),
-            }),
-        };
-        config.rules.retain(|r| r.pattern != domain);
-        config.rules.push(new_rule);
-    }
+    let new_rule = Rule {
+        pattern: domain.to_string(),
+        browser: Some(BrowserRef {
+            desktop_file: entry.desktop_file.clone(),
+            args: entry.profile_args.clone(),
+        }),
+    };
+    config.rules.retain(|r| r.pattern != domain);
+    config.rules.push(new_rule);
 
     if let Err(e) = config::save(&config) {
         eprintln!("silo: failed to save config: {e}");

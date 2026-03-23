@@ -73,16 +73,14 @@ fn build_rules_group(
 
         let pattern_for_delete = rule.pattern.clone();
         let group_ref = rules_group.clone();
-        delete_btn.connect_clicked(move |btn| {
+        let row_ref = row.clone();
+        delete_btn.connect_clicked(move |_| {
             let mut config = config::load();
             config.rules.retain(|r| r.pattern != pattern_for_delete);
             if let Err(e) = config::save(&config) {
                 eprintln!("silo: failed to save config: {e}");
             }
-            // Remove the row visually
-            if let Some(row) = btn.parent().and_then(|p| p.parent()) {
-                group_ref.remove(&row);
-            }
+            group_ref.remove(&row_ref);
         });
 
         // Click row to edit
@@ -100,7 +98,7 @@ fn build_rules_group(
     if config.rules.is_empty() {
         let empty_row = adw::ActionRow::builder()
             .title("No rules yet")
-            .subtitle("Add one above or use 'Always use for...' in the picker")
+            .subtitle("Add one above or click 'Always' in the picker")
             .build();
         rules_group.add(&empty_row);
     }
@@ -335,7 +333,7 @@ pub fn show_on_page(
         .build();
 
     let welcome_group = adw::PreferencesGroup::builder()
-        .description("Silo lets you choose which browser opens your links.\n\nWhen you click a link in an email, chat or any app, Silo pops up with a list of your browsers and their profiles. You choose one, Silo disappears and the link opens in your chosen browser.\n\nIf you toggle on the \"Always use for...\" switch in the picker, links to that domain will always open silently in the selected browser.\n\nUse the <b>Browsers</b> tab to hide browsers or profiles you don't use. The <b>Rules</b> tab lets you set domains that should always open in a specific browser, and decide what happens when no rule matches. The <b>Open</b> tab lets you paste a URL and open it in any browser, or check it for safety.\n\nSilo also unwraps tracking redirects. If a link has been wrapped by Outlook SafeLinks or Google, Silo strips the wrapper and shows you where it really goes.")
+        .description("Silo lets you choose which browser opens your links.\n\nWhen you click a link in an email, chat or any app, Silo pops up with a list of your browsers and their profiles. You choose one, Silo disappears and the link opens in your chosen browser.\n\nClick a browser to open the link. Click the \"Always\" button next to a browser to create a rule so that domain always opens there.\n\nUse the <b>Browsers</b> tab to hide browsers or profiles you don't use. The <b>Rules</b> tab lets you set domains that should always open in a specific browser, and decide what happens when no rule matches. The <b>Open</b> tab lets you paste a URL and open it in any browser, or check it for safety.\n\nSilo also unwraps tracking redirects. If a link has been wrapped by Outlook SafeLinks or Google, Silo strips the wrapper and shows you where it really goes.")
         .build();
 
     welcome_page.add(&welcome_group);
@@ -420,7 +418,9 @@ pub fn show_on_page(
                     match result {
                         Ok(previous) => {
                             let mut config = config::load();
-                            config.previous_default_browser = previous;
+                            if previous.is_some() {
+                                config.previous_default_browser = previous;
+                            }
                             let _ = config::save(&config);
                             // Reopen settings - it'll show the "all set" state
                             win.close();
@@ -563,7 +563,7 @@ pub fn show_on_page(
     });
     custom_group.set_header_suffix(Some(&add_custom_btn));
 
-    for (i, cb) in config.custom_browsers.iter().enumerate() {
+    for cb in &config.custom_browsers {
         let subtitle = match &cb.args {
             Some(args) => format!("{} {}", cb.command, args),
             None => cb.command.clone(),
@@ -581,18 +581,16 @@ pub fn show_on_page(
             .build();
 
         let group_for_del = custom_group.clone();
-        let idx = i;
-        delete_btn.connect_clicked(move |btn| {
+        let row_ref = row.clone();
+        let name_for_del = cb.name.clone();
+        let cmd_for_del = cb.command.clone();
+        delete_btn.connect_clicked(move |_| {
             let mut config = config::load();
-            if idx < config.custom_browsers.len() {
-                config.custom_browsers.remove(idx);
-                if let Err(e) = config::save(&config) {
-                    eprintln!("silo: failed to save config: {e}");
-                }
+            config.custom_browsers.retain(|cb| !(cb.name == name_for_del && cb.command == cmd_for_del));
+            if let Err(e) = config::save(&config) {
+                eprintln!("silo: failed to save config: {e}");
             }
-            if let Some(row) = btn.parent().and_then(|p| p.parent()) {
-                group_for_del.remove(&row);
-            }
+            group_for_del.remove(&row_ref);
         });
 
         row.add_suffix(&delete_btn);
@@ -818,7 +816,7 @@ pub fn show_on_page(
 
     let open_page = adw::PreferencesPage::builder()
         .title("Open")
-        .icon_name("globe-symbolic")
+        .icon_name("send-to-symbolic")
         .build();
 
     let open_group = adw::PreferencesGroup::builder()
@@ -1008,6 +1006,12 @@ pub fn show_on_page(
     info_group.add(&donate_row);
     about_page.add(&info_group);
 
+    let privacy_group = adw::PreferencesGroup::builder()
+        .title("Privacy")
+        .description("Silo has no analytics, no telemetry and no network access. Your config is a plain JSON file stored locally and never leaves your machine.")
+        .build();
+    about_page.add(&privacy_group);
+
     // -- uninstall --
 
     let uninstall_page = adw::PreferencesPage::builder()
@@ -1107,11 +1111,13 @@ pub fn show_on_page(
     window.add(&about_page);
     window.add(&uninstall_page);
 
-    // Show the requested page, or welcome if not registered
+    // Show the requested page, welcome if not registered, browsers otherwise
     if let Some(name) = page {
         window.set_visible_page_name(name);
     } else if !is_default {
         window.set_visible_page_name("welcome");
+    } else {
+        window.set_visible_page_name("browsers");
     }
 
     // Refresh rules when window regains focus

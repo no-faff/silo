@@ -39,7 +39,7 @@ sits in the middle so that when you click a link outside a browser (in
 an email, a chat app, a document, wherever), Silo pops up and lets you
 choose which browser or profile to open it in.
 
-Toggle "Always use for example.com" and that domain goes straight to
+Click "Always" next to a browser and that domain goes straight to
 your chosen browser next time with no popup.
 
 ## How it compares
@@ -79,7 +79,7 @@ Outlook wraps links through SafeLinks (those long
 `google.com/url`. The real destination is buried inside as a parameter.
 
 Silo detects these, strips the wrapper and shows you where the link
-really goes. The picker displays the real domain, and your rules match
+really goes. The picker displays the real domain and your rules match
 against it. This works even when redirects are nested (SafeLinks
 wrapping a Google redirect wrapping the actual URL).
 
@@ -93,7 +93,7 @@ spots them in a URL, so you know what you're about to open.
 ## Rules
 
 Rules send specific domains straight to a browser without showing the
-picker. Create them from the picker ("Always use for...") or from the
+picker. Create them from the picker ("Always" button) or from the
 Rules tab in settings.
 
 Patterns can be a plain domain like `github.com` or include a path

@@ -48,8 +48,6 @@ pub struct WindowSize {
 pub struct Config {
     #[serde(default)]
     pub always_ask: bool,
-    #[serde(default)]
-    pub remember_choice: bool,
     pub fallback_browser: Option<BrowserRef>,
     pub previous_default_browser: Option<String>,
     #[serde(default)]
@@ -68,7 +66,6 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             always_ask: false,
-            remember_choice: false,
             fallback_browser: None,
             previous_default_browser: None,
             rules: Vec::new(),
@@ -153,7 +150,6 @@ mod tests {
     fn config_with_rules_round_trips() {
         let config = Config {
             always_ask: true,
-            remember_choice: false,
             fallback_browser: Some(BrowserRef {
                 desktop_file: "firefox.desktop".to_string(),
                 args: Some("-P default".to_string()),
@@ -190,7 +186,6 @@ mod tests {
 
         let config = Config {
             always_ask: true,
-            remember_choice: false,
             fallback_browser: None,
             previous_default_browser: None,
             rules: vec![Rule {

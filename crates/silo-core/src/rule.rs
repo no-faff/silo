@@ -9,11 +9,11 @@ pub fn find_matching_rule<'a>(rules: &'a [Rule], domain: &str, path: &str) -> Op
 /// Returns true if the domain and path match a rule pattern.
 ///
 /// Pattern syntax:
-///   "github.com"          — exact domain (also matches www.github.com)
-///   "*.google.com"        — any subdomain of google.com
-///   "github.com/gist"     — domain + path prefix (/gist, /gist/abc, etc.)
-///   "github.com/gist/*"   — domain + path wildcard (explicit)
-///   "*.corp.com/internal"  — subdomain wildcard + path prefix
+///   "github.com"          - exact domain (also matches www.github.com)
+///   "*.google.com"        - any subdomain of google.com
+///   "github.com/gist"     - domain + path prefix (/gist, /gist/abc, etc.)
+///   "github.com/gist/*"   - domain + path wildcard (explicit)
+///   "*.corp.com/internal"  - subdomain wildcard + path prefix
 pub fn url_matches(domain: &str, path: &str, pattern: &str) -> bool {
     if pattern.is_empty() {
         return false;
