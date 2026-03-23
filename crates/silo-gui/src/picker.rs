@@ -56,7 +56,7 @@ pub fn show(
 
     if was_redirected {
         let redirect_label = gtk::Label::builder()
-            .label("Unwrapped from a redirect")
+            .label("Showing the real destination")
             .css_classes(["dim-label", "caption"])
             .margin_top(4)
             .build();
@@ -79,7 +79,7 @@ pub fn show(
 
     if !domain_str.is_empty() {
         let hint_label = gtk::Label::builder()
-            .label("Choose a browser, or click Always to set a rule.")
+            .label("Choose a browser or click Always to remember. Esc to close.")
             .css_classes(["dim-label", "caption"])
             .margin_top(6)
             .build();
@@ -200,7 +200,6 @@ pub fn show(
         let win_for_btn = window.clone();
 
         btn.connect_clicked(move |_| {
-            save_rule(&domain_for_btn, &entry, &win_for_btn);
             if let Err(e) = silo_core::launcher::launch(&entry, &url_for_btn) {
                 let dialog = adw::AlertDialog::builder()
                     .heading("Failed to open browser")
@@ -210,6 +209,7 @@ pub fn show(
                 dialog.present(Some(&win_for_btn));
                 return;
             }
+            save_rule(&domain_for_btn, &entry, &win_for_btn);
             win_for_btn.close();
         });
     }

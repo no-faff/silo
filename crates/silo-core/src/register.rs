@@ -1,25 +1,19 @@
 use std::path::PathBuf;
 use std::process::Command;
-use std::time::Duration;
 
 const DESKTOP_FILENAME: &str = "com.nofaff.Silo.desktop";
 
 /// Queries xdg-settings for the current default browser with a 3-second
 /// timeout. Returns the .desktop file ID or an empty string on failure.
 pub fn get_default_browser() -> String {
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let result = Command::new("xdg-settings")
-            .args(["get", "default-web-browser"])
-            .output()
-            .ok()
-            .and_then(|o| String::from_utf8(o.stdout).ok())
-            .map(|s| s.trim().to_string())
-            .unwrap_or_default();
-        let _ = tx.send(result);
-    });
-
-    rx.recv_timeout(Duration::from_secs(3)).unwrap_or_default()
+    Command::new("timeout")
+        .args(["3", "xdg-settings", "get", "default-web-browser"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default()
 }
 
 /// Returns true if Silo is currently the default browser.
@@ -250,13 +244,9 @@ pub fn uninstall() -> Result<(), String> {
     // remove icon
     let _ = std::fs::remove_file(icon_install_path());
 
-    // remove config
-    let config_dir = crate::config::config_path()
-        .parent()
-        .map(|p| p.to_path_buf());
-    if let Some(dir) = config_dir {
-        let _ = std::fs::remove_dir_all(&dir);
-    }
+    // remove config file (not the entire directory)
+    let config_file = crate::config::config_path();
+    let _ = std::fs::remove_file(&config_file);
 
     // remove the binary itself
     if let Ok(exe) = std::env::current_exe() {
