@@ -99,8 +99,7 @@ fn try_unwrap(raw: &str) -> Option<String> {
 /// Returns the Office document type if the URL path ends with a known
 /// Office file extension.
 fn detect_office_document(path: &str) -> Option<OfficeDocType> {
-    let path = path.to_lowercase();
-
+    // path is already lowercased by the caller
     if path.ends_with(".xlsx") || path.ends_with(".xls") || path.ends_with(".xlsm") {
         Some(OfficeDocType::Spreadsheet)
     } else if path.ends_with(".docx") || path.ends_with(".doc") || path.ends_with(".docm") {

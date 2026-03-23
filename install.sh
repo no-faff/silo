@@ -31,6 +31,17 @@ sed "s|Exec=silo|Exec=${INSTALL_DIR}/${BINARY_NAME}|" \
 update-desktop-database "${DESKTOP_DIR}" 2>/dev/null || true
 
 echo "Installed to ${INSTALL_DIR}/${BINARY_NAME}"
+
+# Check if the install directory is in PATH
+case ":${PATH}:" in
+    *":${INSTALL_DIR}:"*) ;;
+    *) echo ""
+       echo "Warning: ${INSTALL_DIR} is not in your PATH."
+       echo "Add it to your shell profile, or run Silo using the full path:"
+       echo "  ${INSTALL_DIR}/${BINARY_NAME}"
+       echo "" ;;
+esac
+
 echo ""
 echo "To set Silo as your default browser, run:"
 echo "  silo"

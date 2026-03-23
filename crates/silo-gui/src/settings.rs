@@ -335,7 +335,7 @@ pub fn show_on_page(
         .build();
 
     let welcome_group = adw::PreferencesGroup::builder()
-        .description("Silo lets you choose which browser opens your links.\n\nWhen you click a link in an email, chat or any app, Silo pops up with a list of your browsers and their profiles. You choose one, Silo disappears and the link opens in your chosen browser.\n\nIf you toggle on the \u{201c}Always use for\u{2026}\u{201d} switch in the picker, links to that domain will always open silently in the selected browser.\n\nUse the <b>Browsers</b> tab to hide browsers or profiles you don\u{2019}t use. The <b>Rules</b> tab lets you set domains that should always open in a specific browser, and decide what happens when no rule matches. The <b>Open</b> tab lets you paste a URL and open it in any browser, or check it for safety.\n\nSilo also unwraps tracking redirects. If a link has been wrapped by Outlook SafeLinks or Google, Silo strips the wrapper and shows you where it really goes.")
+        .description("Silo lets you choose which browser opens your links.\n\nWhen you click a link in an email, chat or any app, Silo pops up with a list of your browsers and their profiles. You choose one, Silo disappears and the link opens in your chosen browser.\n\nIf you toggle on the \"Always use for...\" switch in the picker, links to that domain will always open silently in the selected browser.\n\nUse the <b>Browsers</b> tab to hide browsers or profiles you don't use. The <b>Rules</b> tab lets you set domains that should always open in a specific browser, and decide what happens when no rule matches. The <b>Open</b> tab lets you paste a URL and open it in any browser, or check it for safety.\n\nSilo also unwraps tracking redirects. If a link has been wrapped by Outlook SafeLinks or Google, Silo strips the wrapper and shows you where it really goes.")
         .build();
 
     welcome_page.add(&welcome_group);
@@ -445,16 +445,20 @@ pub fn show_on_page(
 
     btn_group.add(&adw::PreferencesRow::builder().child(&register_btn).build());
 
-    // Remove card styling from this group
-    let provider = gtk::CssProvider::new();
-    provider.load_from_string(".bare-group { margin-top: -12px; } .bare-group list { background: none; box-shadow: none; border: none; } .bare-group row { background: none; border: none; } .bare-group row:focus { outline: none; }");
-    if let Some(display) = gtk::gdk::Display::default() {
-        gtk::style_context_add_provider_for_display(
-            &display,
-            &provider,
-            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
-        );
-    }
+    // Remove card styling from this group (load CSS once globally)
+    use std::sync::Once;
+    static CSS_INIT: Once = Once::new();
+    CSS_INIT.call_once(|| {
+        let provider = gtk::CssProvider::new();
+        provider.load_from_string(".bare-group { margin-top: -12px; } .bare-group list { background: none; box-shadow: none; border: none; } .bare-group row { background: none; border: none; } .bare-group row:focus { outline: none; }");
+        if let Some(display) = gtk::gdk::Display::default() {
+            gtk::style_context_add_provider_for_display(
+                &display,
+                &provider,
+                gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+            );
+        }
+    });
     btn_group.add_css_class("bare-group");
 
     welcome_page.add(&btn_group);
@@ -1147,7 +1151,7 @@ pub fn show_on_page(
         // Not default yet: warn the user
         let dialog = adw::AlertDialog::builder()
             .heading("Silo is not your default browser")
-            .body("Silo won\u{2019}t work until you set it as your default browser.")
+            .body("Silo won't work until you set it as your default browser.")
             .build();
         dialog.add_responses(&[("close", "Close anyway"), ("back", "Go back")]);
         dialog.set_response_appearance("close", adw::ResponseAppearance::Destructive);
