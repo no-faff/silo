@@ -24,8 +24,17 @@ else
     echo "Error: could not find ${DESKTOP_FILE}"
     exit 1
 fi
-sed "s|Exec=silo|Exec=${INSTALL_DIR}/${BINARY_NAME}|" \
+sed "s|^Exec=silo |Exec=${INSTALL_DIR}/${BINARY_NAME} |" \
     "${DESKTOP_SRC}" > "${DESKTOP_DIR}/${DESKTOP_FILE}"
+
+# Install icon
+ICON_SRC="data/icons/hicolor/128x128/apps/com.nofaff.Silo.png"
+ICON_DIR="${HOME}/.local/share/icons/hicolor/128x128/apps"
+if [ -f "${ICON_SRC}" ]; then
+    mkdir -p "${ICON_DIR}"
+    cp "${ICON_SRC}" "${ICON_DIR}/com.nofaff.Silo.png"
+    gtk-update-icon-cache "${HOME}/.local/share/icons/hicolor" 2>/dev/null || true
+fi
 
 # Update desktop database
 update-desktop-database "${DESKTOP_DIR}" 2>/dev/null || true

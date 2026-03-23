@@ -29,7 +29,8 @@ fn build_rules_group(
     });
     rules_group.set_header_suffix(Some(&add_btn));
 
-    let stale_rules = silo_core::rule::find_stale_rules(&config.rules, browsers);
+    let all_browsers = silo_core::browser::discover();
+    let stale_rules = silo_core::rule::find_stale_rules(&config.rules, &all_browsers);
 
     for rule in &config.rules {
         let is_stale = stale_rules.iter().any(|s| std::ptr::eq(*s, rule));
@@ -178,6 +179,7 @@ fn show_add_rule_dialog(
     let browser_ref = browser_row.clone();
     let browsers_clone = browsers.to_vec();
     let old_pattern = existing.map(|r| r.pattern.clone());
+    let window_ref = window.clone();
 
     dialog.connect_response(None, move |_, response| {
         if response == "cancel" {
@@ -217,6 +219,13 @@ fn show_add_rule_dialog(
 
         if let Err(e) = config::save(&config) {
             eprintln!("silo: failed to save config: {e}");
+        }
+
+        if let Some(app) = window_ref.application().and_downcast::<adw::Application>() {
+            window_ref.close();
+            let config = config::load();
+            let browsers = silo_core::browser::discover_with_config(&config);
+            show_on_page(&app, &config, &browsers, Some("rules"));
         }
     });
 
@@ -319,7 +328,7 @@ pub fn show_on_page(
 ) -> adw::PreferencesWindow {
     let window = adw::PreferencesWindow::builder()
         .application(app)
-        .title("Silo")
+        .title("Silo Settings")
         .default_width(550)
         .default_height(680)
         .build();
@@ -726,10 +735,17 @@ pub fn show_on_page(
             if let Ok(file) = result
                 && let Some(path) = file.path() {
                     let source = config::config_path();
-                    match std::fs::copy(&source, &path) {
+                    let tmp = path.with_extension("json.tmp");
+                    match std::fs::copy(&source, &tmp) {
                         Ok(_) => {
-                            let toast = adw::Toast::new("Config exported");
-                            win_ref.add_toast(toast);
+                            if let Err(e) = std::fs::rename(&tmp, &path) {
+                                eprintln!("silo: export rename failed: {e}");
+                                let toast = adw::Toast::new("Export failed");
+                                win_ref.add_toast(toast);
+                            } else {
+                                let toast = adw::Toast::new("Config exported");
+                                win_ref.add_toast(toast);
+                            }
                         }
                         Err(e) => {
                             eprintln!("silo: export failed: {e}");
@@ -889,7 +905,7 @@ pub fn show_on_page(
         let id = gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(300), move || {
             let processed = silo_core::url::process_url(&text);
             if processed.was_redirected {
-                redirect_row.set_title("Unwrapped from redirect");
+                redirect_row.set_title("Showing the real destination");
                 redirect_row.set_subtitle(&processed.final_url);
                 redirect_row.set_visible(true);
             } else {
