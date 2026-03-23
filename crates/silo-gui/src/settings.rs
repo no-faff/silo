@@ -72,14 +72,17 @@ fn build_rules_group(
             .build();
 
         let pattern_for_delete = rule.pattern.clone();
-        let window_ref = window.clone();
-        delete_btn.connect_clicked(move |_| {
+        let group_ref = rules_group.clone();
+        delete_btn.connect_clicked(move |btn| {
             let mut config = config::load();
             config.rules.retain(|r| r.pattern != pattern_for_delete);
             if let Err(e) = config::save(&config) {
                 eprintln!("silo: failed to save config: {e}");
             }
-            window_ref.close();
+            // Remove the row visually
+            if let Some(row) = btn.parent().and_then(|p| p.parent()) {
+                group_ref.remove(&row);
+            }
         });
 
         // Click row to edit
@@ -354,18 +357,21 @@ pub fn show_on_page(
         }
     };
 
+    let setup_title = if is_default { "Done" } else { "Silo needs to be your default browser" };
+
     let setup_group = adw::PreferencesGroup::builder()
-        .title("Silo needs to be your default browser")
+        .title(setup_title)
         .description(&setup_description)
         .build();
 
-    let status_row = adw::ActionRow::builder()
-        .title("Silo is your default browser")
-        .subtitle("You're all set")
-        .visible(is_default)
-        .build();
-    status_row.add_prefix(&gtk::Image::from_icon_name("emblem-ok-symbolic"));
-    setup_group.add(&status_row);
+    if is_default {
+        let status_row = adw::ActionRow::builder()
+            .title("Silo is your default browser")
+            .subtitle("You're all set")
+            .build();
+        status_row.add_prefix(&gtk::Image::from_icon_name("emblem-ok-symbolic"));
+        setup_group.add(&status_row);
+    }
 
     welcome_page.add(&setup_group);
 
@@ -379,9 +385,9 @@ pub fn show_on_page(
         .halign(gtk::Align::Center)
         .build();
 
-    let status_row_ref = status_row.clone();
     let setup_group_ref = setup_group.clone();
-    let btn_group_ref = btn_group.clone();
+    let app_ref = app.clone();
+    let window_for_setup = window.clone();
     register_btn.connect_clicked(move |btn| {
         btn.set_sensitive(false);
         btn.set_label("Setting up, please wait...");
@@ -391,10 +397,10 @@ pub fn show_on_page(
             tx.send(silo_core::register::set_default_browser()).ok();
         });
 
-        let status_row = status_row_ref.clone();
         let setup_group = setup_group_ref.clone();
-        let btn_group = btn_group_ref.clone();
         let btn_ref = btn.clone();
+        let win = window_for_setup.clone();
+        let app = app_ref.clone();
         gtk::glib::idle_add_local(move || match rx.try_recv() {
             Ok(result) => {
                 match result {
@@ -403,10 +409,11 @@ pub fn show_on_page(
                         config.setup_declined = false;
                         config.previous_default_browser = previous;
                         let _ = config::save(&config);
-                        setup_group.set_title("Done");
-                        setup_group.set_description(Some("Silo is intercepting your links."));
-                        status_row.set_visible(true);
-                        btn_group.set_visible(false);
+                        // Reopen settings - it'll show the "all set" state
+                        win.close();
+                        let config = config::load();
+                        let browsers = silo_core::browser::discover_with_config(&config);
+                        show_on_page(&app, &config, &browsers, Some("welcome"));
                     }
                     Err(e) => {
                         eprintln!("silo: {e}");
@@ -426,7 +433,7 @@ pub fn show_on_page(
 
     // Remove card styling from this group
     let provider = gtk::CssProvider::new();
-    provider.load_from_string(".bare-group { margin-top: -12px; } .bare-group list.boxed-list { background: none; box-shadow: none; border: none; }");
+    provider.load_from_string(".bare-group { margin-top: -12px; } .bare-group list { background: none; box-shadow: none; border: none; } .bare-group row { background: none; border: none; } .bare-group row:focus { outline: none; }");
     if let Some(display) = gtk::gdk::Display::default() {
         gtk::style_context_add_provider_for_display(
             &display,
@@ -555,9 +562,9 @@ pub fn show_on_page(
             .css_classes(["flat"])
             .build();
 
-        let window_for_del = window.clone();
+        let group_for_del = custom_group.clone();
         let idx = i;
-        delete_btn.connect_clicked(move |_| {
+        delete_btn.connect_clicked(move |btn| {
             let mut config = config::load();
             if idx < config.custom_browsers.len() {
                 config.custom_browsers.remove(idx);
@@ -565,7 +572,9 @@ pub fn show_on_page(
                     eprintln!("silo: failed to save config: {e}");
                 }
             }
-            window_for_del.close();
+            if let Some(row) = btn.parent().and_then(|p| p.parent()) {
+                group_for_del.remove(&row);
+            }
         });
 
         row.add_suffix(&delete_btn);
@@ -862,7 +871,7 @@ pub fn show_on_page(
     // Safety check
     let safety_group = adw::PreferencesGroup::builder()
         .title("Safety check")
-        .description("Check a URL against Google's Transparency Report for known threats.")
+        .description("Check the URL above against Google's Transparency Report for known threats.")
         .build();
 
     let check_btn_row = adw::ActionRow::builder()
@@ -1093,10 +1102,11 @@ pub fn show_on_page(
         // Not default yet: warn the user
         let dialog = adw::AlertDialog::builder()
             .heading("Silo is not your default browser")
-            .body("Silo won\u{2019}t be able to intercept links until you set it as the default browser.")
+            .body("Silo won\u{2019}t work until you set it as your default browser.")
             .build();
         dialog.add_responses(&[("close", "Close anyway"), ("back", "Go back")]);
         dialog.set_response_appearance("close", adw::ResponseAppearance::Destructive);
+        dialog.set_response_appearance("back", adw::ResponseAppearance::Suggested);
         dialog.set_default_response(Some("back"));
 
         let win_ref = win.clone();

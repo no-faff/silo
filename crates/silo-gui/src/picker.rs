@@ -120,6 +120,7 @@ pub fn show(
 
     let remember_row = adw::SwitchRow::builder()
         .title(&format!("Always use for {}", domain_str))
+        .subtitle("Creates a rule. You can remove it in Settings.")
         .active(config.remember_choice)
         .visible(!domain_str.is_empty())
         .build();
@@ -135,40 +136,6 @@ pub fn show(
     remember_list.append(&remember_row);
     remember_list.set_cursor_from_name(Some("pointer"));
 
-    // -- bottom bar --
-
-    let heart_btn = gtk::Button::builder()
-        .icon_name("emblem-favorite-symbolic")
-        .tooltip_text("Buy me a cuppa")
-        .css_classes(["flat"])
-        .build();
-    heart_btn.connect_clicked(|_| {
-        let _ = std::process::Command::new("xdg-open")
-            .arg("https://nofaff.netlify.app")
-            .spawn();
-    });
-
-    let star_btn = gtk::Button::builder()
-        .icon_name("starred-symbolic")
-        .tooltip_text("Leave a star on GitHub")
-        .css_classes(["flat"])
-        .build();
-    star_btn.connect_clicked(|_| {
-        let _ = std::process::Command::new("xdg-open")
-            .arg("https://github.com/no-faff/silo")
-            .spawn();
-    });
-
-    let bottom_bar = gtk::Box::builder()
-        .orientation(gtk::Orientation::Horizontal)
-        .halign(gtk::Align::Center)
-        .spacing(4)
-        .margin_top(4)
-        .margin_bottom(8)
-        .build();
-    bottom_bar.append(&star_btn);
-    bottom_bar.append(&heart_btn);
-
     // -- assemble layout --
 
     let content_box = gtk::Box::builder()
@@ -177,7 +144,6 @@ pub fn show(
     content_box.append(&domain_box);
     content_box.append(&scrolled);
     content_box.append(&remember_list);
-    content_box.append(&bottom_bar);
 
     let toolbar = adw::ToolbarView::new();
     toolbar.add_top_bar(&header);
@@ -277,6 +243,12 @@ pub fn show(
     window.add_controller(key_controller);
 
     // Auto-close when picker loses focus (user clicked elsewhere)
+    window.connect_notify_local(Some("is-active"), move |win, _| {
+        if !win.is_active() {
+            win.close();
+        }
+    });
+
     // modal so it takes focus even when settings is open behind
     window.set_modal(true);
     window.present();

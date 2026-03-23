@@ -20,7 +20,7 @@ fn on_command_line(
     app: &adw::Application,
     cmd: &gio::ApplicationCommandLine,
 ) -> gtk::glib::ExitCode {
-    silo_core::register::install_icon();
+    silo_core::register::install_launcher_entry();
 
     let args = cmd.arguments();
     let args: Vec<String> = args

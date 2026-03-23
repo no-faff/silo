@@ -10,36 +10,86 @@ Part of the [No Faff](https://github.com/no-faff) suite.
 
 ## Why
 
-On Windows I was using [BrowserPicker](https://github.com/AJMortimer/BrowserPicker)
-by Andrew Longmore and liked it. I wanted the same thing on Linux, with
-broader profile detection and a native GNOME look.
+There are a handful of browser pickers on Linux. [Junction](https://github.com/sonnyp/Junction)
+is the most popular but it has no rules and no profile detection.
+[Linkquisition](https://github.com/nicoulaj/linkquisition) has rules
+but profiles are manual. [Linklever](https://linklever.app) auto-detects
+profiles but it's paid and uses a non-native UI. On Windows,
+[BrowserPicker](https://github.com/AJMortimer/BrowserPicker) by Andrew
+Longmore was the inspiration for this whole project.
+
+I wanted something free, native and thorough: auto-detect every profile
+across every browser family, route links with rules, unwrap tracking
+redirects, and look like it belongs on a GNOME or KDE desktop.
 
 ## What it does
 
-Silo registers as your default browser. Don't worry, it doesn't replace
-anything. It just sits in the middle so that when you click a link
-outside a browser (in an email, a chat app, a document, wherever), Silo
-pops up and lets you choose which browser or profile to open it in.
+Silo registers as your default browser. It doesn't replace anything. It
+sits in the middle so that when you click a link outside a browser (in
+an email, a chat app, a document, wherever), Silo pops up and lets you
+choose which browser or profile to open it in.
 
 Toggle "Always use for example.com" and that domain goes straight to
 your chosen browser next time with no popup.
 
+## How it compares
+
+| | Silo | Junction | Linkquisition | Linklever | BrowserPicker (Win) |
+|-|------|----------|---------------|-----------|---------------------|
+| Profile auto-detection | All Chromium + Firefox | No | No | Yes | Chrome/Edge only |
+| Rules | Domain, path, wildcards, exceptions | No | Regex | Yes | Text match |
+| Redirect unwrapping | SafeLinks + Google, nested | No | Plugin | Partial | Yes |
+| Fallback browser | Yes | No | Yes | Yes | Yes |
+| Config export/import | Yes | No | No | No | No |
+| Safety check | Google Transparency Report | No | No | No | No |
+| Custom browsers | Yes | No | No | No | No |
+| Hide browsers/profiles | Yes | No | No | No | No |
+| Native UI | GTK4/libadwaita | GTK4 | GTK3 | Avalonia | WPF |
+| Free | MIT | GPLv3 | MIT | Paid | MIT |
+
+Silo is the only free, open-source Linux picker with automatic profile
+detection across all Chromium and Firefox-family browsers.
+
 ## Profile detection
 
-Silo detects profiles within each browser, not just the browsers
+Silo finds profiles within each browser, not just the browsers
 themselves:
 
 - **Chromium family:** Chrome, Edge, Brave, Vivaldi, Opera, Chromium
 - **Firefox family:** Firefox, Zen, Floorp, LibreWolf, Waterfox, Mullvad Browser
 
-"Vivaldi - Work" and "Vivaldi - Personal" appear as separate entries.
+"Vivaldi - Work" and "Vivaldi - Personal" appear as separate entries in
+the picker, each opening the correct profile.
 
 ## Redirect unwrapping
 
-Links from email and chat are often wrapped in tracking redirects
-(Outlook SafeLinks, Google redirects). Silo strips these and shows you
-where the link really goes. It also labels Office documents (Word, Excel,
-PowerPoint) when it spots them in a URL.
+Links from email and chat are often wrapped in tracking redirects.
+Outlook wraps links through SafeLinks (those long
+`safelinks.protection.outlook.com` URLs) and Google wraps them through
+`google.com/url`. The real destination is buried inside as a parameter.
+
+Silo detects these, strips the wrapper and shows you where the link
+really goes. The picker displays the real domain, and your rules match
+against it. This works even when redirects are nested (SafeLinks
+wrapping a Google redirect wrapping the actual URL).
+
+Silo also labels Office documents (Word, Excel, PowerPoint) when it
+spots them in a URL, so you know what you're about to open.
+
+## Rules
+
+Rules send specific domains straight to a browser without showing the
+picker. Create them from the picker ("Always use for...") or from the
+Rules tab in settings.
+
+Patterns can be a plain domain like `github.com` or include a path
+like `github.com/no-faff`. A path pattern matches anything underneath
+it, so `github.com/no-faff` matches `github.com/no-faff/silo` but
+not `github.com/other`. Wildcards work too: `*.corp.com`.
+
+Exception rules let you force the picker for a specific domain, even
+if you have a fallback browser set. Useful for domains where you
+genuinely want to choose each time.
 
 ## Installing
 
@@ -59,8 +109,8 @@ Download the [latest release](../../releases/latest), extract and run
 the install script:
 
 ```bash
-tar xzf silo-1.0.0-linux-x86_64.tar.gz
-cd silo-1.0.0
+tar xzf silo-1.1.0-linux-x86_64.tar.gz
+cd silo-1.1.0
 ./install.sh
 ```
 
@@ -79,27 +129,33 @@ removes the config and deletes the binary.
 
 1. A link is clicked somewhere on your system
 2. Linux calls Silo (it's the registered default browser)
-3. Silo checks your rules. If a rule matches the domain, it opens that
+3. If the link is wrapped in a redirect (SafeLinks, Google), Silo
+   unwraps it to get the real URL
+4. Silo checks your rules. If a rule matches, it opens the assigned
    browser silently
-4. If no rule matches, Silo either shows the picker or sends the link
+5. If no rule matches, Silo either shows the picker or sends the link
    to whichever browser you've chosen in the "When no rule matches"
    setting on the Rules tab
-5. Keyboard shortcuts: 1-9 and 0 to pick a browser, Escape to close
+
+Keyboard shortcuts in the picker: 1-9 and 0 select a browser, Escape
+closes without opening anything.
 
 ## Settings
 
 Launch `silo` with no URL to open settings.
 
-- **Welcome:** Introduction and default browser setup
-- **Browsers:** Hide browsers or profiles you don't use. Add custom
-  browsers that weren't detected automatically (e.g. a browser
-  installed outside the standard locations, or a command-line tool
-  you want to open links with)
-- **Rules:** Domain rules, the "When no rule matches" setting, suspend
-  rules toggle, and config export/import
-- **Open:** Paste a URL and open it in any browser. Includes redirect
-  unwrapping and a safety check via Google's Transparency Report
-- **About:** Version, links and donate
+- **Welcome:** Introduction, how each tab works, and default browser
+  registration
+- **Browsers:** All detected browsers and profiles, with toggles to
+  hide any you don't use. Add custom browsers for anything not detected
+  automatically
+- **Rules:** Domain and path rules, the "When no rule matches" fallback
+  setting, a suspend toggle to temporarily bypass all rules, and config
+  export/import
+- **Open:** Paste a URL and open it directly in any browser. Shows
+  redirect unwrapping in real time and includes a safety check via
+  Google's Transparency Report
+- **About:** Version, GitHub link, report issues and donate
 - **Uninstall:** Remove Silo and restore your previous default browser
 
 ## Building from source

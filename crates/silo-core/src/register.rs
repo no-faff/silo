@@ -17,20 +17,51 @@ fn icon_install_path() -> PathBuf {
         .join("icons/hicolor/128x128/apps/com.nofaff.Silo.png")
 }
 
-/// Installs just the icon to the hicolor theme so the window has an icon
-/// even before the user clicks "Set as default browser".
-pub fn install_icon() {
+/// Installs the icon and a launcher-only .desktop file (no MimeType) so
+/// Silo shows in the app launcher before the user sets it as default.
+pub fn install_launcher_entry() {
+    // Icon
     let icon_dest = icon_install_path();
-    if icon_dest.exists() {
-        return;
-    }
     if let Some(parent) = icon_dest.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let _ = std::fs::write(&icon_dest, ICON_BYTES);
-    let _ = Command::new("gtk-update-icon-cache")
-        .arg(dirs::data_dir().unwrap().join("icons/hicolor"))
-        .status();
+    if !icon_dest.exists() {
+        let _ = std::fs::write(&icon_dest, ICON_BYTES);
+        let _ = Command::new("gtk-update-icon-cache")
+            .arg(dirs::data_dir().unwrap().join("icons/hicolor"))
+            .status();
+    }
+
+    // Launcher .desktop file without MimeType (won't register as browser)
+    let dest = desktop_install_path();
+    if dest.exists() {
+        return; // Don't overwrite a full .desktop file from set_default_browser
+    }
+    let binary = match std::env::current_exe() {
+        Ok(b) => b,
+        Err(_) => return,
+    };
+    let contents = format!(
+        "[Desktop Entry]\n\
+         Name=Silo\n\
+         Comment=Browser picker with profile support\n\
+         Exec={} --settings\n\
+         Icon=com.nofaff.Silo\n\
+         Type=Application\n\
+         Categories=Network;Utility;\n\
+         StartupNotify=false\n",
+        binary.display()
+    );
+    if let Some(parent) = dest.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let tmp = dest.with_extension("desktop.tmp");
+    if std::fs::write(&tmp, contents).is_ok() {
+        let _ = std::fs::rename(&tmp, &dest);
+        if let Some(parent) = dest.parent() {
+            let _ = Command::new("update-desktop-database").arg(parent).status();
+        }
+    }
 }
 
 /// Writes the .desktop file to ~/.local/share/applications/ pointing at
