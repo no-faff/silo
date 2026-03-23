@@ -8,7 +8,17 @@
 
 Part of the [No Faff](https://github.com/no-faff) suite.
 
-## Why
+You have a work browser and a personal browser. Or you use different
+profiles for different things. You click a link in an email and it
+opens in the wrong one. Now you have to copy the URL, switch browsers,
+paste it. Every time.
+
+Silo fixes that. Click a link anywhere and Silo asks which browser or
+profile you want. One click and it opens. Set up a rule and it stops
+asking. Work links go to your work browser. Personal links go to your
+personal browser. No copying, no pasting, no thinking about it.
+
+## Why Silo
 
 There are a handful of browser pickers on Linux. [Junction](https://github.com/sonnyp/Junction)
 is the most popular but it has no rules and no profile detection.
