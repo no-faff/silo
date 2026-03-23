@@ -178,6 +178,12 @@ When Silo unwraps a tracking redirect, it opens the real URL directly
 in your browser. Microsoft's SafeLinks server or Google's redirect
 service never finds out you clicked the link.
 
+## Compatibility
+
+- Requires GTK4 with libadwaita 1.5+. Ubuntu 22.04 and earlier are not supported.
+- Flatpak and Snap browser profiles are detected alongside native installs.
+- If you installed Silo via a package manager, use the package manager to uninstall rather than the built-in uninstall button (which deletes the binary directly).
+
 ## Building from source
 
 Requires Rust 1.85+ and GTK4/libadwaita development packages:

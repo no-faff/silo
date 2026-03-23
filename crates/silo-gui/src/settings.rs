@@ -410,30 +410,43 @@ pub fn show_on_page(
         let btn_ref = btn.clone();
         let win = window_for_setup.clone();
         let app = app_ref.clone();
-        gtk::glib::idle_add_local(move || match rx.try_recv() {
-            Ok(result) => {
-                match result {
-                    Ok(previous) => {
-                        let mut config = config::load();
-                        config.previous_default_browser = previous;
-                        let _ = config::save(&config);
-                        // Reopen settings - it'll show the "all set" state
-                        win.close();
-                        let config = config::load();
-                        let browsers = silo_core::browser::discover_with_config(&config);
-                        show_on_page(&app, &config, &browsers, Some("welcome"));
-                    }
-                    Err(e) => {
-                        eprintln!("silo: {e}");
-                        btn_ref.set_label("Set as default browser");
-                        btn_ref.set_sensitive(true);
-                        setup_group.set_description(Some(&format!("Registration failed: {e}. Try again.")));
-                    }
-                }
-                gtk::glib::ControlFlow::Break
+        let started = std::time::Instant::now();
+        gtk::glib::idle_add_local(move || {
+            if started.elapsed() > std::time::Duration::from_secs(30) {
+                eprintln!("silo: xdg-settings timed out after 30 seconds");
+                btn_ref.set_label("Set as default browser");
+                btn_ref.set_sensitive(true);
+                setup_group.set_description(Some(
+                    "Registration timed out. xdg-settings did not respond within 30 seconds. Try again or set the default browser manually in your system settings.",
+                ));
+                return gtk::glib::ControlFlow::Break;
             }
-            Err(std::sync::mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
-            Err(_) => gtk::glib::ControlFlow::Break,
+
+            match rx.try_recv() {
+                Ok(result) => {
+                    match result {
+                        Ok(previous) => {
+                            let mut config = config::load();
+                            config.previous_default_browser = previous;
+                            let _ = config::save(&config);
+                            // Reopen settings - it'll show the "all set" state
+                            win.close();
+                            let config = config::load();
+                            let browsers = silo_core::browser::discover_with_config(&config);
+                            show_on_page(&app, &config, &browsers, Some("welcome"));
+                        }
+                        Err(e) => {
+                            eprintln!("silo: {e}");
+                            btn_ref.set_label("Set as default browser");
+                            btn_ref.set_sensitive(true);
+                            setup_group.set_description(Some(&format!("Registration failed: {e}. Try again.")));
+                        }
+                    }
+                    gtk::glib::ControlFlow::Break
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
+                Err(_) => gtk::glib::ControlFlow::Break,
+            }
         });
     });
 
@@ -761,17 +774,32 @@ pub fn show_on_page(
                 if let Some(path) = file.path() {
                     match config::try_load_from(&path) {
                         Ok(imported) => {
-                            if let Err(e) = config::save(&imported) {
-                                eprintln!("silo: import save failed: {e}");
-                            }
-                            if let Some(app) = win_ref.application().and_downcast::<adw::Application>() {
-                                win_ref.close();
-                                let config = config::load();
-                                let browsers = silo_core::browser::discover_with_config(&config);
-                                show_on_page(&app, &config, &browsers, Some("rules"));
-                            } else {
-                                win_ref.close();
-                            }
+                            let confirm = adw::AlertDialog::builder()
+                                .heading("Import config?")
+                                .body("This will replace your current settings and rules.")
+                                .build();
+                            confirm.add_responses(&[("cancel", "Cancel"), ("import", "Import")]);
+                            confirm.set_response_appearance("import", adw::ResponseAppearance::Destructive);
+                            confirm.set_default_response(Some("cancel"));
+
+                            let win = win_ref.clone();
+                            confirm.connect_response(None, move |_, response| {
+                                if response != "import" {
+                                    return;
+                                }
+                                if let Err(e) = config::save(&imported) {
+                                    eprintln!("silo: import save failed: {e}");
+                                }
+                                if let Some(app) = win.application().and_downcast::<adw::Application>() {
+                                    win.close();
+                                    let config = config::load();
+                                    let browsers = silo_core::browser::discover_with_config(&config);
+                                    show_on_page(&app, &config, &browsers, Some("rules"));
+                                } else {
+                                    win.close();
+                                }
+                            });
+                            confirm.present(Some(&win_ref));
                         }
                         Err(e) => {
                             eprintln!("silo: invalid config file: {e}");

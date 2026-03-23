@@ -138,6 +138,33 @@ pub fn set_default_browser() -> Result<Option<String>, String> {
     Ok(previous)
 }
 
+/// Strips references to `desktop_filename` from mimeapps.list content,
+/// preserving comments, section headers and blank lines.
+fn strip_desktop_from_mimeapps(contents: &str, desktop_filename: &str) -> String {
+    let cleaned: String = contents
+        .lines()
+        .filter_map(|line| {
+            if line.contains(desktop_filename) && line.contains('=') {
+                let (key, value) = line.split_once('=').unwrap();
+                let filtered: Vec<&str> = value
+                    .split(';')
+                    .filter(|s| !s.is_empty() && *s != desktop_filename)
+                    .collect();
+                if filtered.is_empty() {
+                    None // Remove this line entirely
+                } else {
+                    Some(format!("{key}={};", filtered.join(";")))
+                }
+            } else {
+                Some(line.to_string())
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    cleaned + "\n"
+}
+
 /// Removes all references to Silo from mimeapps.list files so it doesn't
 /// linger as a registered handler after uninstall.
 fn clean_mimeapps_list() {
@@ -148,29 +175,9 @@ fn clean_mimeapps_list() {
 
     for path in paths.into_iter().flatten() {
         if let Ok(contents) = std::fs::read_to_string(&path) {
-            let cleaned: String = contents
-                .lines()
-                .filter_map(|line| {
-                    if line.contains(DESKTOP_FILENAME) && line.contains('=') {
-                        let (key, value) = line.split_once('=').unwrap();
-                        let filtered: Vec<&str> = value
-                            .split(';')
-                            .filter(|s| !s.is_empty() && *s != DESKTOP_FILENAME)
-                            .collect();
-                        if filtered.is_empty() {
-                            None // Remove this line entirely
-                        } else {
-                            Some(format!("{key}={};", filtered.join(";")))
-                        }
-                    } else {
-                        Some(line.to_string())
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-
+            let cleaned = strip_desktop_from_mimeapps(&contents, DESKTOP_FILENAME);
             let tmp = path.with_extension("list.tmp");
-            if std::fs::write(&tmp, cleaned + "\n").is_ok() {
+            if std::fs::write(&tmp, &cleaned).is_ok() {
                 let _ = std::fs::rename(&tmp, &path);
             }
         }
@@ -240,4 +247,88 @@ pub fn uninstall() -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strip_removes_silo_only_entry() {
+        let input = "[Default Applications]\n\
+                     x-scheme-handler/http=com.nofaff.Silo.desktop;\n\
+                     x-scheme-handler/https=com.nofaff.Silo.desktop;\n";
+        let result = strip_desktop_from_mimeapps(input, DESKTOP_FILENAME);
+        assert_eq!(
+            result,
+            "[Default Applications]\n"
+        );
+    }
+
+    #[test]
+    fn strip_preserves_other_handlers() {
+        let input = "[Default Applications]\n\
+                     x-scheme-handler/http=com.nofaff.Silo.desktop;firefox.desktop;\n";
+        let result = strip_desktop_from_mimeapps(input, DESKTOP_FILENAME);
+        assert_eq!(
+            result,
+            "[Default Applications]\n\
+             x-scheme-handler/http=firefox.desktop;\n"
+        );
+    }
+
+    #[test]
+    fn strip_preserves_comments() {
+        let input = "# This is a comment\n\
+                     [Default Applications]\n\
+                     x-scheme-handler/http=com.nofaff.Silo.desktop;\n";
+        let result = strip_desktop_from_mimeapps(input, DESKTOP_FILENAME);
+        assert_eq!(
+            result,
+            "# This is a comment\n\
+             [Default Applications]\n"
+        );
+    }
+
+    #[test]
+    fn strip_preserves_blank_lines() {
+        let input = "[Default Applications]\n\
+                     x-scheme-handler/http=firefox.desktop;\n\
+                     \n\
+                     [Added Associations]\n\
+                     x-scheme-handler/http=firefox.desktop;\n";
+        let result = strip_desktop_from_mimeapps(input, DESKTOP_FILENAME);
+        // No Silo entries, so output should be identical to input
+        assert_eq!(result, input);
+    }
+
+    #[test]
+    fn strip_preserves_section_headers() {
+        let input = "[Default Applications]\n\
+                     x-scheme-handler/http=com.nofaff.Silo.desktop;\n\
+                     \n\
+                     [Added Associations]\n\
+                     x-scheme-handler/http=com.nofaff.Silo.desktop;firefox.desktop;\n";
+        let result = strip_desktop_from_mimeapps(input, DESKTOP_FILENAME);
+        assert_eq!(
+            result,
+            "[Default Applications]\n\
+             \n\
+             [Added Associations]\n\
+             x-scheme-handler/http=firefox.desktop;\n"
+        );
+    }
+
+    #[test]
+    fn strip_preserves_unrelated_lines() {
+        let input = "[Default Applications]\n\
+                     text/html=firefox.desktop;\n\
+                     x-scheme-handler/http=com.nofaff.Silo.desktop;\n";
+        let result = strip_desktop_from_mimeapps(input, DESKTOP_FILENAME);
+        assert_eq!(
+            result,
+            "[Default Applications]\n\
+             text/html=firefox.desktop;\n"
+        );
+    }
 }

@@ -5,6 +5,12 @@
 A large release that brings Silo to feature parity with BrowserPicker
 on Windows and beyond what any other Linux browser picker offers.
 
+**Flatpak and Snap support**
+- Profile detection now checks Flatpak paths (`~/.var/app/`) and Snap
+  paths (`~/snap/`) alongside standard locations
+- Browsers installed via Flatpak or Snap are detected and their
+  profiles expanded correctly
+
 ### New features
 
 **Redirect unwrapping**
@@ -55,7 +61,7 @@ on Windows and beyond what any other Linux browser picker offers.
 **Config export/import**
 - Export your settings and rules to a JSON file
 - Import from a file, with validation (invalid files are rejected, not
-  silently applied)
+  silently applied) and confirmation dialog before overwriting
 - Toast notification on successful export
 
 **Safety check**
@@ -104,6 +110,7 @@ on Windows and beyond what any other Linux browser picker offers.
 - Settings window no longer closes when deleting a rule or custom
   browser
 - Registration failure re-enables the button and shows the error
+- Registration times out after 30 seconds instead of hanging forever
 - Import validates JSON before saving (invalid files show an error
   dialog instead of silently wiping config)
 - About tab links use GTK UriLauncher instead of raw xdg-open
