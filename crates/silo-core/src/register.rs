@@ -17,6 +17,22 @@ fn icon_install_path() -> PathBuf {
         .join("icons/hicolor/128x128/apps/com.nofaff.Silo.png")
 }
 
+/// Installs just the icon to the hicolor theme so the window has an icon
+/// even before the user clicks "Set as default browser".
+pub fn install_icon() {
+    let icon_dest = icon_install_path();
+    if icon_dest.exists() {
+        return;
+    }
+    if let Some(parent) = icon_dest.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&icon_dest, ICON_BYTES);
+    let _ = Command::new("gtk-update-icon-cache")
+        .arg(dirs::data_dir().unwrap().join("icons/hicolor"))
+        .status();
+}
+
 /// Writes the .desktop file to ~/.local/share/applications/ pointing at
 /// the current binary, then updates the desktop database.
 pub fn install_desktop_file() -> Result<(), String> {
@@ -77,7 +93,7 @@ pub fn set_default_browser() -> Result<Option<String>, String> {
         .ok()
         .and_then(|o| String::from_utf8(o.stdout).ok())
         .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
+        .filter(|s| !s.is_empty() && s != DESKTOP_FILENAME);
 
     let status = Command::new("xdg-settings")
         .args(["set", "default-web-browser", DESKTOP_FILENAME])
@@ -89,6 +105,50 @@ pub fn set_default_browser() -> Result<Option<String>, String> {
     }
 
     Ok(previous)
+}
+
+/// Removes all references to Silo from mimeapps.list files so it doesn't
+/// linger as a registered handler after uninstall.
+fn clean_mimeapps_list() {
+    let paths = [
+        dirs::config_dir().map(|d| d.join("mimeapps.list")),
+        dirs::data_dir().map(|d| d.join("applications/mimeapps.list")),
+    ];
+
+    for path in paths.into_iter().flatten() {
+        if let Ok(contents) = std::fs::read_to_string(&path) {
+            let cleaned: String = contents
+                .lines()
+                .filter_map(|line| {
+                    if line.contains(DESKTOP_FILENAME) && line.contains('=') {
+                        let (key, value) = line.split_once('=').unwrap();
+                        let filtered: Vec<&str> = value
+                            .split(';')
+                            .filter(|s| !s.is_empty() && *s != DESKTOP_FILENAME)
+                            .collect();
+                        if filtered.is_empty() {
+                            None // Remove this line entirely
+                        } else {
+                            Some(format!("{key}={};", filtered.join(";")))
+                        }
+                    } else {
+                        Some(line.to_string())
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            let _ = std::fs::write(&path, cleaned + "\n");
+        }
+    }
+}
+
+/// Finds any installed browser .desktop file to use as a fallback default.
+fn find_any_browser() -> Option<String> {
+    let browsers = crate::browser::discover();
+    browsers.into_iter()
+        .map(|b| b.desktop_file)
+        .find(|f| f != DESKTOP_FILENAME)
 }
 
 /// Removes the .desktop file, restores the previous default browser,
@@ -106,9 +166,13 @@ pub fn uninstall() -> Result<(), String> {
         .unwrap_or_default();
 
     if current == DESKTOP_FILENAME {
-        if let Some(ref previous) = config.previous_default_browser {
+        // Try the recorded previous browser, otherwise find any installed browser
+        let fallback = config.previous_default_browser.clone()
+            .or_else(|| find_any_browser());
+
+        if let Some(ref browser) = fallback {
             let _ = Command::new("xdg-settings")
-                .args(["set", "default-web-browser", previous])
+                .args(["set", "default-web-browser", browser])
                 .status();
         }
     }
@@ -121,6 +185,9 @@ pub fn uninstall() -> Result<(), String> {
             .arg(parent)
             .status();
     }
+
+    // remove Silo from mimeapps.list so it doesn't linger as a handler
+    clean_mimeapps_list();
 
     // remove icon
     let _ = std::fs::remove_file(icon_install_path());

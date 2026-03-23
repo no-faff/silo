@@ -34,6 +34,13 @@ themselves:
 
 "Vivaldi - Work" and "Vivaldi - Personal" appear as separate entries.
 
+## Redirect unwrapping
+
+Links from email and chat are often wrapped in tracking redirects
+(Outlook SafeLinks, Google redirects). Silo strips these and shows you
+where the link really goes. It also labels Office documents (Word, Excel,
+PowerPoint) when it spots them in a URL.
+
 ## Installing
 
 Silo needs GTK4 and libadwaita. On Fedora:
@@ -59,14 +66,14 @@ cd silo-1.0.0
 
 This copies the binary to `~/.local/bin/` and installs the `.desktop`
 file. Launch Silo from your app launcher or run `silo` in a terminal.
-On first launch it asks to register as your default browser, which is
-how it intercepts links so you get the choice.
+On first launch it asks to register as your default browser. Your
+previous default is saved and restored if you uninstall.
 
 ## Uninstalling
 
-Open settings (launch `silo` with no arguments), go to About and click
-Uninstall. It restores your previous default browser, removes the config
-and deletes the binary. No terminal needed.
+Open settings (launch `silo` with no arguments), go to the Uninstall
+tab and click Uninstall. It restores your previous default browser,
+removes the config and deletes the binary.
 
 ## How it works
 
@@ -74,20 +81,26 @@ and deletes the binary. No terminal needed.
 2. Linux calls Silo (it's the registered default browser)
 3. Silo checks your rules. If a rule matches the domain, it opens that
    browser silently
-4. If no rule matches and you have a fallback browser set (with "Always
-   ask" turned off), it opens the fallback silently
-5. Otherwise the picker appears
-
-Keyboard shortcuts: 1-9 and 0 to pick a browser, Escape to close.
+4. If no rule matches, Silo either shows the picker or sends the link
+   to whichever browser you've chosen in the "When no rule matches"
+   setting on the Rules tab
+5. Keyboard shortcuts: 1-9 and 0 to pick a browser, Escape to close
 
 ## Settings
 
-Launch `silo` with no URL to open settings. Three tabs:
+Launch `silo` with no URL to open settings.
 
-- **Behaviour:** "Always ask" toggle and fallback browser
-- **Rules:** Domain rules created via the picker. Delete rules you no
-  longer want
-- **About:** Version, links, donate and uninstall
+- **Welcome:** Introduction and default browser setup
+- **Browsers:** Hide browsers or profiles you don't use. Add custom
+  browsers that weren't detected automatically (e.g. a browser
+  installed outside the standard locations, or a command-line tool
+  you want to open links with)
+- **Rules:** Domain rules, the "When no rule matches" setting, suspend
+  rules toggle, and config export/import
+- **Open:** Paste a URL and open it in any browser. Includes redirect
+  unwrapping and a safety check via Google's Transparency Report
+- **About:** Version, links and donate
+- **Uninstall:** Remove Silo and restore your previous default browser
 
 ## Building from source
 
