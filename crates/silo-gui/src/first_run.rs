@@ -15,13 +15,13 @@ pub fn show(app: &adw::Application, url: Option<String>) {
         .filter(|s| !s.is_empty() && s != "com.nofaff.Silo.desktop");
 
     // Save a default config with the previous browser recorded.
-    // setup_declined stays false so the welcome page shows again if
-    // the app is closed or crashes before the user registers.
     let default_config = config::Config {
         previous_default_browser: previous,
         ..config::Config::default()
     };
-    let _ = config::save(&default_config);
+    if let Err(e) = config::save(&default_config) {
+        eprintln!("silo: failed to save config: {e}");
+    }
 
     if let Some(ref url) = url {
         if browsers.is_empty() {

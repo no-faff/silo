@@ -83,7 +83,7 @@ fn try_unwrap(raw: &str) -> Option<String> {
     }
 
     // Google redirect (all regional variants: google.com, google.co.uk, etc.)
-    if host.contains("google.") && parsed.path() == "/url" {
+    if (host.starts_with("google.") || host.contains(".google.")) && parsed.path() == "/url" {
         let inner = parsed
             .query_pairs()
             .find(|(k, _)| k == "q")
@@ -208,6 +208,13 @@ mod tests {
     fn google_non_redirect_path() {
         let normal = "https://www.google.com/search?q=rust";
         let result = process_url(normal);
+        assert!(!result.was_redirected);
+    }
+
+    #[test]
+    fn evil_google_not_unwrapped() {
+        let evil = "https://evilgoogle.com/url?q=https%3A%2F%2Fexample.com";
+        let result = process_url(evil);
         assert!(!result.was_redirected);
     }
 

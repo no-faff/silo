@@ -50,8 +50,6 @@ pub struct Config {
     pub always_ask: bool,
     #[serde(default)]
     pub remember_choice: bool,
-    #[serde(default)]
-    pub setup_declined: bool,
     pub fallback_browser: Option<BrowserRef>,
     pub previous_default_browser: Option<String>,
     #[serde(default)]
@@ -71,7 +69,6 @@ impl Default for Config {
         Self {
             always_ask: false,
             remember_choice: true,
-            setup_declined: false,
             fallback_browser: None,
             previous_default_browser: None,
             rules: Vec::new(),
@@ -157,7 +154,6 @@ mod tests {
         let config = Config {
             always_ask: true,
             remember_choice: false,
-            setup_declined: false,
             fallback_browser: Some(BrowserRef {
                 desktop_file: "firefox.desktop".to_string(),
                 args: Some("-P default".to_string()),
@@ -195,7 +191,6 @@ mod tests {
         let config = Config {
             always_ask: true,
             remember_choice: false,
-            setup_declined: false,
             fallback_browser: None,
             previous_default_browser: None,
             rules: vec![Rule {
@@ -253,7 +248,6 @@ mod tests {
         let json = r#"{
             "always_ask": false,
             "remember_choice": true,
-            "setup_declined": false,
             "fallback_browser": null,
             "previous_default_browser": null,
             "rules": [{

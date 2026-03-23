@@ -28,7 +28,7 @@ pub fn install_launcher_entry() {
     if !icon_dest.exists() {
         let _ = std::fs::write(&icon_dest, ICON_BYTES);
         let _ = Command::new("gtk-update-icon-cache")
-            .arg(dirs::data_dir().unwrap().join("icons/hicolor"))
+            .arg(dirs::data_dir().expect("could not determine XDG_DATA_HOME").join("icons/hicolor"))
             .status();
     }
 
@@ -107,7 +107,7 @@ pub fn install_desktop_file() -> Result<(), String> {
     }
     let _ = std::fs::write(&icon_dest, ICON_BYTES);
     let _ = Command::new("gtk-update-icon-cache")
-        .arg(dirs::data_dir().unwrap().join("icons/hicolor"))
+        .arg(dirs::data_dir().expect("could not determine XDG_DATA_HOME").join("icons/hicolor"))
         .status();
 
     Ok(())
@@ -169,7 +169,10 @@ fn clean_mimeapps_list() {
                 .collect::<Vec<_>>()
                 .join("\n");
 
-            let _ = std::fs::write(&path, cleaned + "\n");
+            let tmp = path.with_extension("list.tmp");
+            if std::fs::write(&tmp, cleaned + "\n").is_ok() {
+                let _ = std::fs::rename(&tmp, &path);
+            }
         }
     }
 }
@@ -183,7 +186,7 @@ fn find_any_browser() -> Option<String> {
 }
 
 /// Removes the .desktop file, restores the previous default browser,
-/// deletes config, and removes the binary.
+/// deletes config and removes the binary.
 pub fn uninstall() -> Result<(), String> {
     let config = crate::config::load();
 

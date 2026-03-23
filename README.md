@@ -20,7 +20,7 @@ Longmore was the inspiration for this whole project.
 
 I wanted something free, native and thorough: auto-detect every profile
 across every browser family, route links with rules, unwrap tracking
-redirects, and look like it belongs on a GNOME or KDE desktop.
+redirects and look like it belongs on a GNOME or KDE desktop.
 
 ## What it does
 
@@ -72,6 +72,10 @@ Silo detects these, strips the wrapper and shows you where the link
 really goes. The picker displays the real domain, and your rules match
 against it. This works even when redirects are nested (SafeLinks
 wrapping a Google redirect wrapping the actual URL).
+
+Because Silo opens the real URL directly, the tracking redirect is
+bypassed entirely. Microsoft's SafeLinks server or Google's redirect
+service never receives the click.
 
 Silo also labels Office documents (Word, Excel, PowerPoint) when it
 spots them in a URL, so you know what you're about to open.
@@ -144,19 +148,35 @@ closes without opening anything.
 
 Launch `silo` with no URL to open settings.
 
-- **Welcome:** Introduction, how each tab works, and default browser
+- **Welcome:** Introduction, how each tab works and default browser
   registration
 - **Browsers:** All detected browsers and profiles, with toggles to
   hide any you don't use. Add custom browsers for anything not detected
   automatically
 - **Rules:** Domain and path rules, the "When no rule matches" fallback
-  setting, a suspend toggle to temporarily bypass all rules, and config
+  setting, a suspend toggle to temporarily bypass all rules and config
   export/import
 - **Open:** Paste a URL and open it directly in any browser. Shows
   redirect unwrapping in real time and includes a safety check via
   Google's Transparency Report
 - **About:** Version, GitHub link, report issues and donate
 - **Uninstall:** Remove Silo and restore your previous default browser
+
+## Privacy
+
+Silo does not collect, store or transmit any data about the links you
+open. It has no analytics, no telemetry and no network access. Your
+config (rules, browser preferences) is a plain JSON file stored locally
+at `~/.config/silo/config.json` and never leaves your machine.
+
+The only network request Silo ever makes is if you explicitly click
+"Check URL" on the Open tab, which opens Google's Transparency Report
+in your browser. Silo itself does not contact Google or any other
+service.
+
+When Silo unwraps a tracking redirect, it opens the real URL directly
+in your browser. Microsoft's SafeLinks server or Google's redirect
+service never finds out you clicked the link.
 
 ## Building from source
 

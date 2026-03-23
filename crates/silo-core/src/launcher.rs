@@ -2,13 +2,13 @@ use crate::browser::BrowserEntry;
 use std::process::Command;
 
 pub fn launch(entry: &BrowserEntry, url: &str) -> Result<(), String> {
-    let parts: Vec<&str> = entry.exec.split_whitespace().collect();
+    let parts = shlex::split(&entry.exec).ok_or("invalid Exec line")?;
     let executable = parts.first().ok_or("empty Exec line")?;
 
     let mut cmd = Command::new(executable);
 
     for part in &parts[1..] {
-        match *part {
+        match part.as_str() {
             "%u" | "%U" => {
                 cmd.arg(url);
             }

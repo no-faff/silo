@@ -180,14 +180,18 @@ fn show_add_rule_dialog(
     let browser_ref = browser_row.clone();
     let browsers_clone = browsers.to_vec();
     let old_pattern = existing.map(|r| r.pattern.clone());
-    let window_ref = window.clone();
 
     dialog.connect_response(None, move |_, response| {
         if response == "cancel" {
             return;
         }
 
-        let pattern = pattern_ref.text().trim().to_string();
+        let raw_pattern = pattern_ref.text().trim().to_string();
+        let pattern = raw_pattern
+            .strip_prefix("https://")
+            .or_else(|| raw_pattern.strip_prefix("http://"))
+            .unwrap_or(&raw_pattern)
+            .to_string();
         if pattern.is_empty() {
             return;
         }
@@ -216,7 +220,6 @@ fn show_add_rule_dialog(
         if let Err(e) = config::save(&config) {
             eprintln!("silo: failed to save config: {e}");
         }
-        window_ref.close();
     });
 
     dialog.present(Some(window));
@@ -294,7 +297,13 @@ fn show_add_custom_browser_dialog(window: &adw::PreferencesWindow) {
         if let Err(e) = config::save(&config) {
             eprintln!("silo: failed to save config: {e}");
         }
-        window_ref.close();
+
+        if let Some(app) = window_ref.application().and_downcast::<adw::Application>() {
+            window_ref.close();
+            let config = config::load();
+            let browsers = silo_core::browser::discover_with_config(&config);
+            show_on_page(&app, &config, &browsers, Some("browsers"));
+        }
     });
 
     dialog.present(Some(window));
@@ -406,7 +415,6 @@ pub fn show_on_page(
                 match result {
                     Ok(previous) => {
                         let mut config = config::load();
-                        config.setup_declined = false;
                         config.previous_default_browser = previous;
                         let _ = config::save(&config);
                         // Reopen settings - it'll show the "all set" state
@@ -595,6 +603,7 @@ pub fn show_on_page(
     let rules_page = adw::PreferencesPage::builder()
         .title("Rules")
         .icon_name("view-list-symbolic")
+        .name("rules")
         .build();
 
     // Unmatched links behaviour
@@ -755,7 +764,14 @@ pub fn show_on_page(
                             if let Err(e) = config::save(&imported) {
                                 eprintln!("silo: import save failed: {e}");
                             }
-                            win_ref.close();
+                            if let Some(app) = win_ref.application().and_downcast::<adw::Application>() {
+                                win_ref.close();
+                                let config = config::load();
+                                let browsers = silo_core::browser::discover_with_config(&config);
+                                show_on_page(&app, &config, &browsers, Some("rules"));
+                            } else {
+                                win_ref.close();
+                            }
                         }
                         Err(e) => {
                             eprintln!("silo: invalid config file: {e}");
@@ -802,10 +818,13 @@ pub fn show_on_page(
     );
     open_browser_row.set_model(Some(&open_model));
 
+    let no_browsers = browsers.is_empty();
+
     let open_btn = gtk::Button::builder()
         .label("Open")
         .css_classes(["suggested-action"])
         .valign(gtk::Align::Center)
+        .sensitive(!no_browsers)
         .build();
 
     let url_for_open = url_row.clone();
@@ -862,6 +881,15 @@ pub fn show_on_page(
         *debounce_id.borrow_mut() = Some(id);
     });
 
+    if no_browsers {
+        let no_browsers_row = adw::ActionRow::builder()
+            .title("No browsers found")
+            .subtitle("Install a browser or check the Browsers tab")
+            .build();
+        no_browsers_row.add_prefix(&gtk::Image::from_icon_name("dialog-warning-symbolic"));
+        open_group.add(&no_browsers_row);
+    }
+
     open_group.add(&url_row);
     open_group.add(&redirect_row);
     open_group.add(&open_browser_row);
@@ -877,7 +905,8 @@ pub fn show_on_page(
     let check_btn_row = adw::ActionRow::builder()
         .title("Check URL")
         .subtitle("Opens the Transparency Report in the browser selected above")
-        .activatable(true)
+        .activatable(!no_browsers)
+        .sensitive(!no_browsers)
         .build();
     check_btn_row.add_prefix(&gtk::Image::from_icon_name("security-high-symbolic"));
 
@@ -998,7 +1027,7 @@ pub fn show_on_page(
     let prev_name_for_uninstall = previous_browser_name.clone();
     uninstall_row.connect_activated(move |_| {
         let confirm_body = match &prev_name_for_uninstall {
-            Some(name) => format!("This will remove Silo, its config and rules, and restore {name} as your default browser."),
+            Some(name) => format!("This will remove Silo, its config and rules and restore {name} as your default browser."),
             None => "This will remove Silo, its config and rules. You may need to set a default browser manually afterwards.".to_string(),
         };
 
@@ -1069,6 +1098,8 @@ pub fn show_on_page(
     {
         let rules_page = rules_page.clone();
         let current_rules_group = current_rules_group.clone();
+        let suspend_group = suspend_group.clone();
+        let config_group = config_group.clone();
         let browsers = browsers.to_vec();
         window.connect_notify_local(Some("is-active"), move |win, _| {
             if !win.is_active() {
@@ -1077,8 +1108,12 @@ pub fn show_on_page(
             let config = config::load();
             let old_group = current_rules_group.borrow().clone();
             rules_page.remove(&old_group);
+            rules_page.remove(&suspend_group);
+            rules_page.remove(&config_group);
             let new_group = build_rules_group(&browsers, &config, win);
             rules_page.add(&new_group);
+            rules_page.add(&suspend_group);
+            rules_page.add(&config_group);
             *current_rules_group.borrow_mut() = new_group;
         });
     }
