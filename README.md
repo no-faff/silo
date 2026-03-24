@@ -219,6 +219,10 @@ Run the tests:
 cargo test --workspace
 ```
 
+## Browser extensions
+
+[Open with Silo for Firefox](https://github.com/no-faff/silo-firefox) and [Open with Silo for Chrome](https://github.com/no-faff/silo-chrome) add "Open with Silo" to the right-click context menu. Right-click any link, pick a browser. Rules and "Always" work the same way as when Silo intercepts links as your default browser.
+
 ## Licence
 
 [MIT](LICENSE)
