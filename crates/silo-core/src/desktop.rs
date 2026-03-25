@@ -19,6 +19,21 @@ impl DesktopEntry {
     }
 }
 
+/// Strip common suffixes like "Web Browser" from browser names.
+fn clean_browser_name(name: &str) -> String {
+    let suffixes = [" Web Browser", " Browser"];
+    let mut cleaned = name.to_string();
+    for suffix in &suffixes {
+        if let Some(stripped) = cleaned.strip_suffix(suffix) {
+            if !stripped.is_empty() {
+                cleaned = stripped.to_string();
+                break;
+            }
+        }
+    }
+    cleaned
+}
+
 pub fn parse(path: &std::path::Path) -> Option<DesktopEntry> {
     let content = std::fs::read_to_string(path).ok()?;
 
@@ -67,9 +82,11 @@ pub fn parse(path: &std::path::Path) -> Option<DesktopEntry> {
 
     let id = path.file_name()?.to_str()?.to_string();
 
+    let clean_name = clean_browser_name(&name?);
+
     Some(DesktopEntry {
         id,
-        name: name?,
+        name: clean_name,
         exec: exec?,
         icon: icon.unwrap_or_default(),
         mime_types,
@@ -112,7 +129,7 @@ mod tests {
     #[test]
     fn parse_firefox_desktop() {
         let entry = parse(&fixture("firefox.desktop")).unwrap();
-        assert_eq!(entry.name, "Firefox Web Browser");
+        assert_eq!(entry.name, "Firefox");
         assert_eq!(entry.exec, "/usr/bin/firefox %u");
         assert_eq!(entry.icon, "firefox");
         assert_eq!(entry.id, "firefox.desktop");
@@ -129,7 +146,7 @@ mod tests {
     #[test]
     fn parse_flatpak_browser() {
         let entry = parse(&fixture("flatpak-browser.desktop")).unwrap();
-        assert_eq!(entry.name, "Brave Web Browser");
+        assert_eq!(entry.name, "Brave");
         assert!(entry.is_browser());
         assert_eq!(entry.id, "flatpak-browser.desktop");
     }

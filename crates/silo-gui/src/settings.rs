@@ -4,6 +4,22 @@ use silo_core::config::{self, BrowserRef, Config, Rule};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+fn save_browser_order_swapped(browsers: &[BrowserEntry], a: usize, b: usize) {
+    let mut order: Vec<BrowserRef> = browsers
+        .iter()
+        .map(|e| BrowserRef {
+            desktop_file: e.desktop_file.clone(),
+            args: e.profile_args.clone(),
+        })
+        .collect();
+    order.swap(a, b);
+    let mut config = config::load();
+    config.browser_order = order;
+    if let Err(e) = config::save(&config) {
+        eprintln!("silo: failed to save config: {e}");
+    }
+}
+
 fn build_rules_group(
     browsers: &[BrowserEntry],
     config: &Config,
@@ -459,7 +475,13 @@ pub fn show_on_page(
     static CSS_INIT: Once = Once::new();
     CSS_INIT.call_once(|| {
         let provider = gtk::CssProvider::new();
-        provider.load_from_string(".bare-group { margin-top: -12px; } .bare-group list { background: none; box-shadow: none; border: none; } .bare-group row { background: none; border: none; } .bare-group row:focus { outline: none; }");
+        provider.load_from_string("\
+            .bare-group { margin-top: -12px; } \
+            .bare-group list { background: none; box-shadow: none; border: none; } \
+            .bare-group row { background: none; border: none; } \
+            .bare-group row:focus { outline: none; } \
+            .reorder-btn { min-width: 0; min-height: 0; padding: 4px; } \
+            .reorder-btn image { -gtk-icon-size: 12px; }");
         if let Some(display) = gtk::gdk::Display::default() {
             gtk::style_context_add_provider_for_display(
                 &display,
@@ -480,11 +502,28 @@ pub fn show_on_page(
         .name("browsers")
         .build();
 
-    let all_browsers = silo_core::browser::discover();
+    let all_browsers = {
+        let mut b = silo_core::browser::discover();
+        // Apply same ordering as the picker so the settings list matches
+        if !config.browser_order.is_empty() {
+            b.sort_by_key(|e| {
+                let ref_key = config::BrowserRef {
+                    desktop_file: e.desktop_file.clone(),
+                    args: e.profile_args.clone(),
+                };
+                config
+                    .browser_order
+                    .iter()
+                    .position(|o| o == &ref_key)
+                    .unwrap_or(usize::MAX)
+            });
+        }
+        b
+    };
 
     let detected_group = adw::PreferencesGroup::builder()
         .title("Detected browsers")
-        .description("Browsers and profiles found on your system. Hide any you do not use.")
+        .description("Browsers and profiles found on your system. Hide any you do not use. Reorder with the arrow buttons.")
         .build();
 
     let refresh_btn = gtk::Button::builder()
@@ -504,24 +543,34 @@ pub fn show_on_page(
     });
     detected_group.set_header_suffix(Some(&refresh_btn));
 
-    for entry in &all_browsers {
+    let browser_count = all_browsers.len();
+    for (idx, entry) in all_browsers.iter().enumerate() {
         let is_hidden = config.browser_overrides.iter().any(|o| {
             o.desktop_file == entry.desktop_file
                 && o.profile_args.as_deref() == entry.profile_args.as_deref()
                 && o.hidden
         });
 
-        let row = adw::SwitchRow::builder()
+        let row = adw::ActionRow::builder()
             .title(&entry.display_name)
             .subtitle(&entry.desktop_file)
+            .build();
+
+        let icon = gtk::Image::from_icon_name(&entry.icon);
+        icon.set_pixel_size(24);
+        row.add_prefix(&icon);
+
+        // Hide/show toggle
+        let toggle = gtk::Switch::builder()
+            .valign(gtk::Align::Center)
             .active(!is_hidden)
             .build();
 
         let desktop_file = entry.desktop_file.clone();
         let profile_args = entry.profile_args.clone();
-        row.connect_active_notify(move |row| {
+        toggle.connect_active_notify(move |toggle| {
             let mut config = config::load();
-            let hidden = !row.is_active();
+            let hidden = !toggle.is_active();
 
             if let Some(ov) = config.browser_overrides.iter_mut().find(|o| {
                 o.desktop_file == desktop_file
@@ -537,7 +586,6 @@ pub fn show_on_page(
                 });
             }
 
-            // Clean up overrides that are back to default
             config.browser_overrides.retain(|o| {
                 o.hidden || o.display_name.is_some()
             });
@@ -546,6 +594,55 @@ pub fn show_on_page(
                 eprintln!("silo: failed to save config: {e}");
             }
         });
+        row.add_suffix(&toggle);
+
+        // Move up button
+        let up_btn = gtk::Button::builder()
+            .icon_name("go-up-symbolic")
+            .css_classes(["flat", "reorder-btn"])
+            .valign(gtk::Align::Center)
+            .tooltip_text("Move up")
+            .sensitive(idx > 0)
+            .build();
+
+        if idx > 0 {
+            let all_b = all_browsers.clone();
+            let move_idx = idx;
+            let win_for_up = window.clone();
+            let app_for_up = app.clone();
+            up_btn.connect_clicked(move |_| {
+                save_browser_order_swapped(&all_b, move_idx, move_idx - 1);
+                win_for_up.close();
+                let config = config::load();
+                let browsers = silo_core::browser::discover_with_config(&config);
+                show_on_page(&app_for_up, &config, &browsers, Some("browsers"));
+            });
+        }
+        row.add_suffix(&up_btn);
+
+        // Move down button
+        let down_btn = gtk::Button::builder()
+            .icon_name("go-down-symbolic")
+            .css_classes(["flat", "reorder-btn"])
+            .valign(gtk::Align::Center)
+            .tooltip_text("Move down")
+            .sensitive(idx < browser_count - 1)
+            .build();
+
+        if idx < browser_count - 1 {
+            let all_b = all_browsers.clone();
+            let move_idx = idx;
+            let win_for_down = window.clone();
+            let app_for_down = app.clone();
+            down_btn.connect_clicked(move |_| {
+                save_browser_order_swapped(&all_b, move_idx, move_idx + 1);
+                win_for_down.close();
+                let config = config::load();
+                let browsers = silo_core::browser::discover_with_config(&config);
+                show_on_page(&app_for_down, &config, &browsers, Some("browsers"));
+            });
+        }
+        row.add_suffix(&down_btn);
 
         detected_group.add(&row);
     }

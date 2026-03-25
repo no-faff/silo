@@ -389,6 +389,21 @@ pub fn discover_with_config(config: &crate::config::Config) -> Vec<BrowserEntry>
         })
     });
 
+    // Apply custom ordering
+    if !config.browser_order.is_empty() {
+        entries.sort_by_key(|e| {
+            let ref_key = crate::config::BrowserRef {
+                desktop_file: e.desktop_file.clone(),
+                args: e.profile_args.clone(),
+            };
+            config
+                .browser_order
+                .iter()
+                .position(|o| o == &ref_key)
+                .unwrap_or(usize::MAX)
+        });
+    }
+
     // Append custom browsers
     for cb in &config.custom_browsers {
         entries.push(BrowserEntry {

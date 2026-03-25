@@ -58,6 +58,8 @@ pub struct Config {
     pub custom_browsers: Vec<CustomBrowser>,
     #[serde(default)]
     pub browser_overrides: Vec<BrowserOverride>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub browser_order: Vec<BrowserRef>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub picker_size: Option<WindowSize>,
 }
@@ -72,6 +74,7 @@ impl Default for Config {
             rules_suspended: false,
             custom_browsers: Vec::new(),
             browser_overrides: Vec::new(),
+            browser_order: Vec::new(),
             picker_size: None,
         }
     }
