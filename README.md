@@ -44,16 +44,17 @@ your chosen browser next time with no popup.
 
 | | Silo | Junction | Linkquisition | Linklever | BrowserPicker (Win) |
 |-|------|----------|---------------|-----------|---------------------|
-| Profile auto-detection | All Chromium + Firefox | No | No | Yes | Chrome/Edge only |
-| Rules | Domain, path, wildcards, exceptions | No | Regex | Yes | Text match |
-| Redirect unwrapping | SafeLinks + Google, nested | No | Plugin | Partial | Yes |
-| Fallback browser | Yes | No | Yes | Yes | Yes |
-| Config export/import | Yes | No | No | No | No |
+| Profile auto-detection | All Chromium + Firefox | No | No | Yes | Chrome/Edge/Firefox |
+| Rules | Domain, path, wildcards, exceptions | No | Domain, site, regex | Yes | Hostname, prefix, regex, contains |
+| Redirect unwrapping | SafeLinks + Google, nested | No | Plugin | No | Yes |
+| Fallback browser | Yes | No | No | Yes | Yes |
+| Config export/import | Yes | No | No | No | Yes |
 | Safety check | Google Transparency Report | No | No | No | No |
-| Custom browsers | Yes | No | No | No | No |
-| Hide browsers/profiles | Yes | No | No | No | No |
+| Custom browsers | Yes | Partial | Yes | Yes | Yes |
+| Hide browsers/profiles | Yes | No | Yes | No | Yes |
+| Reorder picker list | No | No | No | No | Yes |
 | Native UI | GTK4/libadwaita | GTK4 | GTK3 | Avalonia | WPF |
-| Free | MIT | GPLv3 | MIT | Paid | MIT |
+| Licence | MIT | GPLv3 | MIT | Paid | MIT |
 
 Silo is the only free, open-source Linux picker with automatic profile
 detection across all Chromium and Firefox-family browsers.
