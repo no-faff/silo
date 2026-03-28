@@ -34,6 +34,18 @@ fn on_command_line(
         return gtk::glib::ExitCode::SUCCESS;
     }
 
+    // Convert bare file paths to file:// URLs so the picker handles them
+    let args: Vec<String> = args
+        .into_iter()
+        .map(|a| {
+            if a.starts_with('/') {
+                format!("file://{a}")
+            } else {
+                a
+            }
+        })
+        .collect();
+
     let url = args.iter().find(|a| {
         a.starts_with("http://") || a.starts_with("https://") || a.contains("://")
     });
@@ -86,7 +98,9 @@ fn handle_url(app: &adw::Application, url: &str) {
     let config = silo_core::config::load();
     let processed = silo_core::url::process_url(url);
 
-    if processed.domain.is_none() {
+    let is_file_url = url.starts_with("file://");
+
+    if processed.domain.is_none() && !is_file_url {
         show_error_dialog(app, "Cannot open link", &format!("Received a malformed URL:\n\n{url}"));
         return;
     }
@@ -108,11 +122,26 @@ fn handle_url(app: &adw::Application, url: &str) {
         return;
     }
 
-    let domain = processed.domain.as_deref().unwrap_or("");
+    // For file URLs, derive heading, hint and rule pattern from the file path
+    let (heading, hint, rule_pattern, rule_domain) = if is_file_url {
+        let path = std::path::Path::new(processed.path.as_str());
+        let filename = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("Local file");
+        let ext = path.extension().and_then(|e| e.to_str());
+        let heading = ext.map(|e| format!(".{e} files"));
+        let hint = format!("Choose a browser to open {filename}. Esc to close.");
+        let pattern = ext.map(|e| format!("ext:{e}")).unwrap_or_default();
+        (heading, Some(hint), Some(pattern), String::new())
+    } else {
+        let domain = processed.domain.as_deref().unwrap_or("").to_string();
+        (Some(domain.clone()), None, None, domain)
+    };
 
     // Check rules (unless suspended)
     if !config.rules_suspended
-        && let Some(rule) = silo_core::rule::find_matching_rule(&config.rules, domain, &processed.path) {
+        && let Some(rule) = silo_core::rule::find_matching_rule(&config.rules, &rule_domain, &processed.path) {
             match &rule.browser {
                 Some(browser) => {
                     // Normal rule: launch matching browser
@@ -145,7 +174,7 @@ fn handle_url(app: &adw::Application, url: &str) {
                 return;
             }
 
-    crate::picker::show(app, launch_url, Some(domain), &browsers, &config, processed.was_redirected, processed.office_doc);
+    crate::picker::show(app, launch_url, heading.as_deref(), hint.as_deref(), &browsers, &config, processed.was_redirected, processed.office_doc, rule_pattern.as_deref());
 }
 
 pub fn show_error_dialog(app: &adw::Application, heading: &str, body: &str) {

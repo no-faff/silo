@@ -14,6 +14,7 @@ pub fn find_matching_rule<'a>(rules: &'a [Rule], domain: &str, path: &str) -> Op
 ///   "github.com/gist"     - domain + path prefix (/gist, /gist/abc, etc.)
 ///   "github.com/gist/*"   - domain + path wildcard (explicit)
 ///   "*.corp.com/internal"  - subdomain wildcard + path prefix
+///   "ext:html"            - file extension (matches file:// URLs)
 pub fn url_matches(domain: &str, path: &str, pattern: &str) -> bool {
     if pattern.is_empty() {
         return false;
@@ -22,6 +23,11 @@ pub fn url_matches(domain: &str, path: &str, pattern: &str) -> bool {
     let pattern = pattern.to_lowercase();
     let domain = domain.to_lowercase();
     let path = path.to_lowercase();
+
+    if let Some(ext) = pattern.strip_prefix("ext:") {
+        let suffix = format!(".{ext}");
+        return path.ends_with(&suffix);
+    }
 
     match pattern.find('/') {
         None => {
@@ -250,5 +256,40 @@ mod tests {
         let browsers: Vec<BrowserEntry> = vec![];
         let stale = find_stale_rules(&rules, &browsers);
         assert!(stale.is_empty());
+    }
+
+    // -- ext: pattern matching --
+
+    #[test]
+    fn ext_pattern_matches_html() {
+        assert!(url_matches("", "/home/fred/cheatsheet.html", "ext:html"));
+    }
+
+    #[test]
+    fn ext_pattern_matches_case_insensitive() {
+        assert!(url_matches("", "/home/fred/README.HTML", "ext:html"));
+    }
+
+    #[test]
+    fn ext_pattern_no_match_different_ext() {
+        assert!(!url_matches("", "/home/fred/notes.txt", "ext:html"));
+    }
+
+    #[test]
+    fn ext_pattern_no_match_no_ext() {
+        assert!(!url_matches("", "/home/fred/makefile", "ext:html"));
+    }
+
+    #[test]
+    fn ext_pattern_does_not_match_domain_urls() {
+        // ext:html should match the path, not the domain
+        assert!(!url_matches("example.com", "/page", "ext:html"));
+    }
+
+    #[test]
+    fn ext_pattern_find_matching_rule() {
+        let rules = vec![rule("ext:html")];
+        assert!(find_matching_rule(&rules, "", "/home/fred/test.html").is_some());
+        assert!(find_matching_rule(&rules, "", "/home/fred/test.txt").is_none());
     }
 }

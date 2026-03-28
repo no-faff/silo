@@ -46,16 +46,20 @@ fn load_picker_css() {
 pub fn show(
     app: &adw::Application,
     url: &str,
-    domain: Option<&str>,
+    heading: Option<&str>,
+    hint: Option<&str>,
     browsers: &[BrowserEntry],
     config: &Config,
     was_redirected: bool,
     office_doc: Option<silo_core::url::OfficeDocType>,
+    rule_pattern: Option<&str>,
 ) -> adw::ApplicationWindow {
     load_picker_css();
 
     let url = url.to_string();
-    let domain_str = domain.unwrap_or("").to_string();
+    let heading_str = heading.unwrap_or("").to_string();
+    let hint_str = hint.unwrap_or("Choose a browser. Esc to close.").to_string();
+    let rule_pattern_str = rule_pattern.unwrap_or(&heading_str).to_string();
 
     // -- header bar with settings gear --
 
@@ -86,9 +90,9 @@ pub fn show(
         .margin_end(12)
         .build();
 
-    if !domain_str.is_empty() {
+    if !heading_str.is_empty() {
         let domain_label = gtk::Label::builder()
-            .label(&domain_str)
+            .label(&heading_str)
             .css_classes(["title-1"])
             .ellipsize(gtk::pango::EllipsizeMode::End)
             .max_width_chars(40)
@@ -119,14 +123,12 @@ pub fn show(
         domain_box.append(&doc_label);
     }
 
-    if !domain_str.is_empty() {
-        let hint_label = gtk::Label::builder()
-            .label("Choose a browser. Esc to close.")
-            .css_classes(["dim-label", "caption"])
-            .margin_top(6)
-            .build();
-        domain_box.append(&hint_label);
-    }
+    let hint_label = gtk::Label::builder()
+        .label(&hint_str)
+        .css_classes(["dim-label", "caption"])
+        .margin_top(6)
+        .build();
+    domain_box.append(&hint_label);
 
     // -- browser list --
 
@@ -135,7 +137,12 @@ pub fn show(
         .css_classes(["boxed-list"])
         .build();
 
-    let show_buttons = !domain_str.is_empty();
+    let show_buttons = !rule_pattern_str.is_empty();
+    let tooltip_target = if let Some(ext) = rule_pattern_str.strip_prefix("ext:") {
+        format!(".{ext} files")
+    } else {
+        rule_pattern_str.clone()
+    };
     let mut always_buttons: Vec<gtk::Button> = Vec::new();
     let mut once_buttons: Vec<gtk::Button> = Vec::new();
 
@@ -160,7 +167,7 @@ pub fn show(
                 .label("Always")
                 .css_classes(["picker-btn", "always-btn"])
                 .valign(gtk::Align::Center)
-                .tooltip_text(&format!("Always open {} in {}", domain_str, entry.display_name))
+                .tooltip_text(&format!("Always open {} in {}", tooltip_target, entry.display_name))
                 .build();
 
             let once_btn = gtk::Button::builder()
@@ -271,7 +278,7 @@ pub fn show(
     for (i, btn) in always_buttons.into_iter().enumerate() {
         let entry = browsers[i].clone();
         let url_for_btn = url.clone();
-        let domain_for_btn = domain_str.clone();
+        let pattern_for_btn = rule_pattern_str.clone();
         let win_for_btn = window.clone();
 
         btn.connect_clicked(move |_| {
@@ -284,7 +291,7 @@ pub fn show(
                 dialog.present(Some(&win_for_btn));
                 return;
             }
-            save_rule(&domain_for_btn, &entry, &win_for_btn);
+            save_rule(&pattern_for_btn, &entry, &win_for_btn);
             win_for_btn.close();
         });
     }
@@ -366,7 +373,7 @@ fn save_window_size(window: &adw::ApplicationWindow) {
 }
 
 fn save_rule(
-    domain: &str,
+    pattern: &str,
     entry: &BrowserEntry,
     window: &adw::ApplicationWindow,
 ) {
@@ -379,13 +386,13 @@ fn save_rule(
     });
 
     let new_rule = Rule {
-        pattern: domain.to_string(),
+        pattern: pattern.to_string(),
         browser: Some(BrowserRef {
             desktop_file: entry.desktop_file.clone(),
             args: entry.profile_args.clone(),
         }),
     };
-    config.rules.retain(|r| r.pattern != domain);
+    config.rules.retain(|r| r.pattern != pattern);
     config.rules.push(new_rule);
 
     if let Err(e) = config::save(&config) {

@@ -32,10 +32,25 @@ pub fn show(app: &adw::Application, url: Option<String>) {
             return;
         }
         let processed = silo_core::url::process_url(url);
-        if processed.domain.is_none() {
+        let is_file_url = url.starts_with("file://");
+        if processed.domain.is_none() && !is_file_url {
             crate::app::show_error_dialog(app, "Cannot open link", &format!("Received a malformed URL:\n\n{url}"));
         } else {
-            crate::picker::show(app, &processed.final_url, processed.domain.as_deref(), &browsers, &default_config, processed.was_redirected, processed.office_doc);
+            let (heading, hint, rule_pattern) = if is_file_url {
+                let path = std::path::Path::new(processed.path.as_str());
+                let filename = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("Local file");
+                let ext = path.extension().and_then(|e| e.to_str());
+                let heading = ext.map(|e| format!(".{e} files"));
+                let hint = format!("Choose a browser to open {filename}. Esc to close.");
+                let pattern = ext.map(|e| format!("ext:{e}")).unwrap_or_default();
+                (heading, Some(hint), Some(pattern))
+            } else {
+                (processed.domain.as_deref().map(|s| s.to_string()), None, None)
+            };
+            crate::picker::show(app, &processed.final_url, heading.as_deref(), hint.as_deref(), &browsers, &default_config, processed.was_redirected, processed.office_doc, rule_pattern.as_deref());
         }
     }
 
