@@ -7,4 +7,4 @@ edition = "2024"
 silo-gui = { path = "../silo-gui" }
 silo-core = { path = "../silo-core" }
 gtk = { version = "0.11", package = "gtk4" }
-glib = { version = "0.20", package = "glib" }
+glib = { version = "0.22", package = "glib" }
